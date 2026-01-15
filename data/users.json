@@ -1,0 +1,20 @@
+{
+  "Alice": {
+    "salt": "279faa4cd3876e37bbf2f11e91b6b223",
+    "hash": "270bd460fec3cbfa260bc122bf28959f90cc5e767d753a6e9650d5058ac9bba9",
+    "iterations": 100000,
+    "createdAt": 1768385192591
+  },
+  "Bob": {
+    "salt": "03fb972ad01b8e8a0a5d3fb550801dff",
+    "hash": "92db3effe8d715d746b377ccf02c27e44742fa8f69d0ad0aa0c58d31a567cc14",
+    "iterations": 100000,
+    "createdAt": 1768385412959
+  },
+  "Piter": {
+    "salt": "0fe0d7705d547c5feb828c7531ebfb57",
+    "hash": "356ad0e95527b40c591fdaabed000cd47e7a292501f617f054ba4a2f624a15dc",
+    "iterations": 100000,
+    "createdAt": 1768385474541
+  }
+}

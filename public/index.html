@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TCP Broadcast Chat</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Чат трансляции</h1>
+          <p class="sub">TCP сервер через WebSocket proxy</p>
+        </div>
+        <div class="header-actions">
+          <div class="status" id="status">Отключено</div>
+          <button class="logout hidden" id="logout-btn" type="button">Выйти</button>
+        </div>
+      </header>
+
+      <section class="panel" id="auth-panel">
+        <div class="auth-tabs">
+          <button class="tab active" type="button" id="tab-login">Вход</button>
+          <button class="tab" type="button" id="tab-register">Регистрация</button>
+        </div>
+
+        <form id="login-form" class="auth-form">
+          <label class="field">
+            <span>Логин</span>
+            <input id="login-username" type="text" maxlength="24" placeholder="Введите логин" />
+          </label>
+          <label class="field">
+            <span>Пароль</span>
+            <input id="login-password" type="password" maxlength="64" placeholder="Введите пароль" />
+          </label>
+          <button type="submit">Войти</button>
+          <div class="auth-error" id="login-error"></div>
+        </form>
+
+        <form id="register-form" class="auth-form hidden">
+          <label class="field">
+            <span>Логин</span>
+            <input id="register-username" type="text" maxlength="24" placeholder="Придумайте логин" />
+          </label>
+          <label class="field">
+            <span>Пароль</span>
+            <input id="register-password" type="password" maxlength="64" placeholder="Придумайте пароль" />
+          </label>
+          <div class="password-hint">
+            <div>Пароль должен содержать:</div>
+            <ul>
+              <li id="rule-length">не менее 8 символов</li>
+              <li id="rule-lower">строчную букву</li>
+              <li id="rule-upper">заглавную букву</li>
+              <li id="rule-digit">цифру</li>
+            </ul>
+          </div>
+          <label class="field">
+            <span>Повтор пароля</span>
+            <input id="register-confirm" type="password" maxlength="64" placeholder="Повторите пароль" />
+          </label>
+          <button type="submit">Зарегистрироваться</button>
+          <div class="auth-error" id="register-error"></div>
+        </form>
+      </section>
+
+      <section class="panel hidden" id="chat-panel">
+        <div class="fields">
+          <label class="field">
+            <span>Пользователь</span>
+            <input id="nickname" type="text" maxlength="24" placeholder="guest" disabled />
+          </label>
+          <label class="field">
+            <span>Соединение</span>
+            <button id="connect-btn" type="button">Подключиться</button>
+          </label>
+          <label class="field">
+            <span>Кому</span>
+            <input id="recipient" type="text" maxlength="24" placeholder="всем" list="nicknames" />
+          </label>
+          <label class="field">
+            <span>Секрет (опционально)</span>
+            <input
+              id="secret"
+              type="password"
+              maxlength="64"
+              placeholder="общая фраза"
+              autocomplete="new-password"
+              name="secret-field"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </label>
+        </div>
+        <label class="toggle">
+          <input id="show-encrypted" type="checkbox" />
+          <span>Показывать заглушку для зашифрованных сообщений</span>
+        </label>
+
+        <div class="chat" id="chat"></div>
+
+        <form id="form" class="composer">
+          <textarea
+            id="message"
+            rows="3"
+            placeholder="Напишите сообщение..."
+          ></textarea>
+          <button type="submit">Отправить</button>
+        </form>
+        <div class="hint">Сообщение: Enter — отправить, Shift+Enter — новая строка</div>
+      </section>
+    </main>
+
+    <datalist id="nicknames"></datalist>
+
+    <div class="modal hidden" id="logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+      <div class="modal-card">
+        <h2 id="logout-title">Подтвердите выход</h2>
+        <p>Вы действительно хотите выйти из аккаунта?</p>
+        <div class="modal-actions">
+          <button type="button" id="logout-cancel">Отмена</button>
+          <button type="button" class="danger" id="logout-confirm">Выйти</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
