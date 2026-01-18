@@ -30,6 +30,31 @@
   const logoutModal = document.getElementById("logout-modal");
   const logoutCancel = document.getElementById("logout-cancel");
   const logoutConfirm = document.getElementById("logout-confirm");
+  const voiceJoinBtn = document.getElementById("voice-join");
+  const voiceLeaveBtn = document.getElementById("voice-leave");
+  const voiceMuteBtn = document.getElementById("voice-mute");
+  const voicePttBtn = document.getElementById("voice-ptt");
+  const voiceMicStatus = document.getElementById("voice-mic-status");
+  const voiceWarning = document.getElementById("voice-warning");
+  const voiceParticipantsEl = document.getElementById("voice-participants");
+  const dndToggle = document.getElementById("dnd-toggle");
+  const callStatusEl = document.getElementById("call-status");
+  const callMuteBtn = document.getElementById("call-mute");
+  const callHangupBtn = document.getElementById("call-hangup");
+  const callCancelBtn = document.getElementById("call-cancel");
+  const callAcceptBtn = document.getElementById("call-accept");
+  const callRejectBtn = document.getElementById("call-reject");
+  const incomingCallEl = document.getElementById("incoming-call");
+  const outgoingCallEl = document.getElementById("outgoing-call");
+  const incomingTextEl = document.getElementById("incoming-text");
+  const outgoingTextEl = document.getElementById("outgoing-text");
+  const callRemoteAudioEl = document.getElementById("call-remote-audio");
+  const callMicMeterEl = document.getElementById("call-mic-meter");
+  const userListEl = document.getElementById("user-list");
+  const soundUnlockEl = document.getElementById("sound-unlock");
+  const soundUnlockBtn = document.getElementById("sound-unlock-btn");
+  const e2eeToggle = document.getElementById("e2ee-toggle");
+  const e2eeStatus = document.getElementById("e2ee-status");
 
   let ws = null;
   let reconnectAttempts = 0;
@@ -46,6 +71,12 @@
   const IAM_PREFIX = "::iam::";
   const AUTH_TOKEN_KEY = "authToken";
   const AUTH_TAB_KEY = "authTab";
+  const DND_KEY = "callDnd";
+  const BLOCKED_KEY = "callBlocked";
+  const appConfig = window.__APP_CONFIG__ || {};
+  const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
+  const VOICE_ROOM = "global";
+  const CALL_TIMEOUT_MS = 30000;
 
   const STATUS_TEXT = {
     disconnected: "Отключено",
@@ -53,6 +84,45 @@
     connected: "Подключено",
     reconnecting: "Переподключение",
   };
+
+  const voice = {
+    joined: false,
+    muted: false,
+    localStream: null,
+    peers: new Map(),
+    roster: new Map(),
+    speaking: new Map(),
+    analyserTimers: new Map(),
+    pttActive: false,
+    pttRestoreMuted: true,
+    audioCtx: null,
+  };
+  let voiceLocalSpeaking = false;
+
+  const call = {
+    fsm: null,
+    connection: null,
+    localStream: null,
+    remoteStream: null,
+    localAnalyser: null,
+    analyserTimer: null,
+    audioCtx: null,
+    iceQueue: [],
+    callId: null,
+    peerId: null,
+    e2eeEnabled: false,
+    e2eeReady: false,
+    e2eeKeyPair: null,
+    e2eeWrappingKey: null,
+    e2eeCallKey: null,
+    e2eeTimeout: null,
+    inviteTimeout: null,
+  };
+
+  const inviteCooldowns = new Map();
+  let blockedUsers = new Set();
+  let lastVoiceState = { muted: true, speaking: false };
+  let lastVoiceStateAt = 0;
 
   const setStatus = (state) => {
     statusEl.textContent = STATUS_TEXT[state] || state;
@@ -74,7 +144,8 @@
   const connect = () => {
     if (!hasNickname()) return;
     const url = location.protocol === "https:" ? "wss://" : "ws://";
-    const wsUrl = `${url}${location.hostname}:8080`;
+    const wsHost = location.protocol === "https:" ? location.host : `${location.hostname}:8080`;
+    const wsUrl = `${url}${wsHost}`;
 
     setStatus("connecting");
     ws = new WebSocket(wsUrl);
@@ -85,12 +156,18 @@
       setStatus("connected");
       sendNickname();
       sendWho();
+      sendSignal({ type: "voice:who", room: VOICE_ROOM });
       nicknameEl.disabled = true;
       connectBtn.textContent = "Отключиться";
     });
 
     ws.addEventListener("message", (event) => {
       const text = typeof event.data === "string" ? event.data : "";
+      const signal = window.Signaling ? window.Signaling.parseSignal(text) : null;
+      if (signal) {
+        handleSignal(signal);
+        return;
+      }
       handleIncoming(text);
     });
 
@@ -99,6 +176,8 @@
       nicknameEl.disabled = false;
       connectBtn.textContent = "Подключиться";
       registeredName = "";
+      cleanupVoice("ws_closed");
+      cleanupCall("disconnect");
       if (manualDisconnect) {
         manualDisconnect = false;
         return;
@@ -126,10 +205,7 @@
     }, delay);
   };
 
-  const updateNicknames = (name) => {
-    if (!name) return;
-    if (knownNicknames.has(name)) return;
-    knownNicknames.add(name);
+  const renderNicknames = () => {
     nicknamesEl.innerHTML = "";
     Array.from(knownNicknames)
       .sort((a, b) => a.localeCompare(b))
@@ -138,6 +214,89 @@
         option.value = nickname;
         nicknamesEl.appendChild(option);
       });
+    renderUserList();
+  };
+
+  const addNickname = (name) => {
+    if (!name) return;
+    if (knownNicknames.has(name)) return;
+    knownNicknames.add(name);
+    renderNicknames();
+  };
+
+  const removeNickname = (name) => {
+    if (!name) return;
+    if (!knownNicknames.has(name)) return;
+    knownNicknames.delete(name);
+    renderNicknames();
+  };
+
+  const loadBlocked = () => {
+    try {
+      const raw = localStorage.getItem(BLOCKED_KEY);
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.filter((name) => typeof name === "string"));
+    } catch (_) {}
+    return new Set();
+  };
+
+  const saveBlocked = () => {
+    localStorage.setItem(BLOCKED_KEY, JSON.stringify(Array.from(blockedUsers)));
+  };
+
+  const isBlocked = (name) => blockedUsers.has(name);
+
+  const loadDnd = () => localStorage.getItem(DND_KEY) === "1";
+
+  const saveDnd = (value) => {
+    localStorage.setItem(DND_KEY, value ? "1" : "0");
+  };
+
+  const canPlaceCall = () => call.fsm.state === "idle";
+
+  const renderUserList = () => {
+    if (!userListEl) return;
+    userListEl.innerHTML = "";
+    const me = getNickname();
+    const names = Array.from(knownNicknames).filter((name) => name && name !== me);
+    if (names.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "Нет онлайн пользователей.";
+      userListEl.appendChild(empty);
+      return;
+    }
+    names
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((name) => {
+        const row = document.createElement("div");
+        row.className = `user-row${isBlocked(name) ? " blocked" : ""}`;
+        const label = document.createElement("div");
+        label.textContent = name;
+        const callBtn = document.createElement("button");
+        callBtn.textContent = "Позвонить";
+        callBtn.disabled = !canPlaceCall() || isBlocked(name);
+        callBtn.addEventListener("click", () => {
+          startOutgoingCall(name);
+        });
+        const blockBtn = document.createElement("button");
+        blockBtn.textContent = isBlocked(name) ? "Разблокировать" : "Блок";
+        blockBtn.className = "danger";
+        blockBtn.addEventListener("click", () => {
+          if (isBlocked(name)) {
+            blockedUsers.delete(name);
+          } else {
+            blockedUsers.add(name);
+          }
+          saveBlocked();
+          renderUserList();
+        });
+        row.appendChild(label);
+        row.appendChild(callBtn);
+        row.appendChild(blockBtn);
+        userListEl.appendChild(row);
+      });
   };
 
   const parseIncoming = (text) => {
@@ -145,12 +304,12 @@
 
     const joinMatch = text.match(/^\*\s+(.+?)\s+joined\s+\*$/);
     if (joinMatch) {
-      return { kind: "system", body: text, name: joinMatch[1] };
+      return { kind: "system", body: text, name: joinMatch[1], action: "join" };
     }
 
     const leaveMatch = text.match(/^\*\s+(.+?)\s+left\s+\*$/);
     if (leaveMatch) {
-      return { kind: "system", body: text, name: leaveMatch[1] };
+      return { kind: "system", body: text, name: leaveMatch[1], action: "leave" };
     }
 
     if (text.startsWith("system:")) {
@@ -308,12 +467,13 @@
     if (!parsed) return;
 
     if (parsed.kind === "system") {
-      if (parsed.name) updateNicknames(parsed.name);
+      if (parsed.name && parsed.action === "join") addNickname(parsed.name);
+      if (parsed.name && parsed.action === "leave") removeNickname(parsed.name);
       renderMessage({ kind: "system", body: parsed.body });
       return;
     }
 
-    updateNicknames(parsed.from);
+    addNickname(parsed.from);
 
     if (parsed.body === WHO_MSG) {
       sendIam();
@@ -322,7 +482,7 @@
 
     if (parsed.body.startsWith(IAM_PREFIX)) {
       const name = parsed.body.slice(IAM_PREFIX.length).trim();
-      updateNicknames(name);
+      addNickname(name);
       return;
     }
 
@@ -363,7 +523,7 @@
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const nickname = getNickname();
     if (!nickname) return;
-    updateNicknames(nickname);
+    addNickname(nickname);
     ws.send(nickname);
     registeredName = nickname;
   };
@@ -379,6 +539,918 @@
     if (!registeredName) return;
     ws.send(`${IAM_PREFIX}${registeredName}`);
   };
+
+  const sendSignal = (message) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!message || !message.type) return;
+    const id = getNickname();
+    if (!id) return;
+    const payload = {
+      room: VOICE_ROOM,
+      from: id,
+      ...message,
+    };
+    ws.send(JSON.stringify(payload));
+  };
+
+  const updateVoiceUI = () => {
+    voiceJoinBtn.classList.toggle("hidden", voice.joined);
+    voiceLeaveBtn.classList.toggle("hidden", !voice.joined);
+    voiceMuteBtn.disabled = !voice.joined;
+    voicePttBtn.disabled = !voice.joined;
+    voiceMuteBtn.textContent = voice.muted ? "Включить" : "Выключить";
+    voiceMicStatus.textContent = voice.joined
+      ? `Микрофон: ${voice.muted ? "мут" : "живой"}`
+      : "Микрофон: выкл";
+  };
+
+  const setVoiceWarning = (show) => {
+    voiceWarning.classList.toggle("hidden", !show);
+  };
+
+  const renderVoiceParticipants = () => {
+    voiceParticipantsEl.innerHTML = "";
+    const entries = Array.from(voice.roster.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    entries.forEach(([id, state]) => {
+      const row = document.createElement("div");
+      const speaking = Boolean(state.speaking);
+      row.className = `voice-participant${speaking ? " speaking" : ""}`;
+      const label = document.createElement("span");
+      label.textContent = id;
+      const status = document.createElement("span");
+      status.className = "state";
+      status.textContent = state.muted ? "muted" : speaking ? "speaking" : "listening";
+      row.appendChild(label);
+      row.appendChild(status);
+      voiceParticipantsEl.appendChild(row);
+    });
+  };
+
+  const ensureVoiceAudioCtx = async () => {
+    if (!voice.audioCtx) {
+      voice.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (voice.audioCtx.state === "suspended") {
+      await voice.audioCtx.resume();
+    }
+  };
+
+  const monitorSpeaking = async (stream, id, onChange) => {
+    if (!stream) return;
+    await ensureVoiceAudioCtx();
+    const source = voice.audioCtx.createMediaStreamSource(stream);
+    const analyser = voice.audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let speaking = false;
+    const interval = setInterval(() => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const nextSpeaking = rms > 0.05;
+      if (nextSpeaking !== speaking) {
+        speaking = nextSpeaking;
+        onChange(speaking);
+      }
+    }, 200);
+    voice.analyserTimers.set(id, interval);
+  };
+
+  const stopSpeakingMonitor = (id) => {
+    const timer = voice.analyserTimers.get(id);
+    if (timer) clearInterval(timer);
+    voice.analyserTimers.delete(id);
+  };
+
+  const sendVoiceState = (muted, speaking) => {
+    if (!voice.joined) return;
+    const now = Date.now();
+    const changed = muted !== lastVoiceState.muted || speaking !== lastVoiceState.speaking;
+    if (!changed && now - lastVoiceStateAt < 1000) return;
+    lastVoiceState = { muted, speaking };
+    lastVoiceStateAt = now;
+    sendSignal({
+      type: "voice:state",
+      payload: { muted, speaking },
+    });
+  };
+
+  const setupVoicePeer = (peerId) => {
+    if (voice.peers.has(peerId)) return voice.peers.get(peerId);
+    const connection = WebRTCCall.createConnection({
+      onIceCandidate: (candidate) => {
+        sendSignal({
+          type: "webrtc:ice",
+          to: peerId,
+          payload: { candidate },
+        });
+      },
+      onTrack: (stream) => {
+        const peer = voice.peers.get(peerId);
+        if (peer) {
+          peer.remoteStream = stream;
+        }
+        monitorSpeaking(stream, peerId, (speaking) => {
+          const existing = voice.roster.get(peerId) || {};
+          voice.roster.set(peerId, { ...existing, speaking });
+          renderVoiceParticipants();
+        });
+      },
+    });
+    if (voice.localStream) {
+      connection.addLocalStream(voice.localStream);
+    }
+    const peer = {
+      pc: connection,
+      iceQueue: [],
+      remoteStream: null,
+      readyForCandidates: false,
+    };
+    voice.peers.set(peerId, peer);
+    console.log("[voice] peer created:", peerId);
+    return peer;
+  };
+
+  const closeVoicePeer = (peerId) => {
+    const peer = voice.peers.get(peerId);
+    if (!peer) return;
+    try {
+      peer.pc.close();
+    } catch (_) {}
+    voice.peers.delete(peerId);
+    stopSpeakingMonitor(peerId);
+  };
+
+  const shouldCreateOffer = (localId, remoteId) => localId.localeCompare(remoteId) < 0;
+
+  const joinVoice = async () => {
+    setVoiceWarning(false);
+    if (voice.joined) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setVoiceWarning(true);
+      return;
+    }
+    if (voice.roster.size >= VOICE_LIMIT) {
+      setVoiceWarning(true);
+      return;
+    }
+    try {
+      voice.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      voice.joined = true;
+      voice.muted = false;
+      voiceJoinBtn.blur();
+      updateVoiceUI();
+      console.log("[voice] joined");
+      sendSignal({
+        type: "voice:join",
+        payload: { muted: false, speaking: false },
+      });
+      monitorSpeaking(voice.localStream, "local", (speaking) => {
+        voiceLocalSpeaking = speaking;
+        const selfState = voice.roster.get(getNickname()) || {};
+        voice.roster.set(getNickname(), { ...selfState, speaking });
+        renderVoiceParticipants();
+        sendVoiceState(voice.muted, voiceLocalSpeaking);
+      });
+      voice.roster.set(getNickname(), { muted: voice.muted, speaking: false });
+      renderVoiceParticipants();
+      for (const peerId of voice.roster.keys()) {
+        if (peerId === getNickname()) continue;
+        const peer = setupVoicePeer(peerId);
+        if (shouldCreateOffer(getNickname(), peerId)) {
+          const offer = await peer.pc.createOffer();
+          sendSignal({
+            type: "webrtc:offer",
+            to: peerId,
+            payload: { sdp: offer },
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[voice] getUserMedia error:", err);
+      setVoiceWarning(true);
+    }
+  };
+
+  const leaveVoice = () => {
+    if (!voice.joined) return;
+    sendSignal({ type: "voice:leave" });
+    cleanupVoice("leave");
+  };
+
+  const cleanupVoice = (reason) => {
+    if (reason) console.log("[voice] cleanup:", reason);
+    voice.joined = false;
+    voice.muted = false;
+    voiceLocalSpeaking = false;
+    stopSpeakingMonitor("local");
+    for (const peerId of Array.from(voice.peers.keys())) {
+      closeVoicePeer(peerId);
+    }
+    if (voice.localStream) {
+      voice.localStream.getTracks().forEach((track) => track.stop());
+      voice.localStream = null;
+    }
+    voice.roster.clear();
+    renderVoiceParticipants();
+    setVoiceWarning(false);
+    updateVoiceUI();
+  };
+
+  const toggleVoiceMute = () => {
+    if (!voice.joined || !voice.localStream) return;
+    voice.muted = !voice.muted;
+    voice.localStream.getAudioTracks().forEach((track) => {
+      track.enabled = !voice.muted;
+    });
+    sendVoiceState(voice.muted, voiceLocalSpeaking);
+    const selfState = voice.roster.get(getNickname()) || {};
+    voice.roster.set(getNickname(), { ...selfState, muted: voice.muted });
+    renderVoiceParticipants();
+    updateVoiceUI();
+  };
+
+  const pttDown = () => {
+    if (!voice.joined || !voice.localStream) return;
+    if (voice.pttActive) return;
+    voice.pttActive = true;
+    voice.pttRestoreMuted = voice.muted;
+    voice.muted = false;
+    voice.localStream.getAudioTracks().forEach((track) => {
+      track.enabled = true;
+    });
+    sendVoiceState(voice.muted, voiceLocalSpeaking);
+    updateVoiceUI();
+  };
+
+  const pttUp = () => {
+    if (!voice.joined || !voice.localStream) return;
+    if (!voice.pttActive) return;
+    voice.pttActive = false;
+    voice.muted = voice.pttRestoreMuted;
+    voice.localStream.getAudioTracks().forEach((track) => {
+      track.enabled = !voice.muted;
+    });
+    sendVoiceState(voice.muted, voiceLocalSpeaking);
+    updateVoiceUI();
+  };
+
+  const handleVoiceOffer = async (from, sdp) => {
+    if (!voice.joined) return;
+    const peer = setupVoicePeer(from);
+    try {
+      await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    } catch (err) {
+      console.error("[voice] setRemoteDescription error:", err);
+      return;
+    }
+    peer.readyForCandidates = true;
+    while (peer.iceQueue.length > 0) {
+      try {
+        await peer.pc.addIceCandidate(peer.iceQueue.shift());
+      } catch (err) {
+        console.error("[voice] addIceCandidate error:", err);
+      }
+    }
+    const answer = await peer.pc.createAnswer();
+    sendSignal({
+      type: "webrtc:answer",
+      to: from,
+      payload: { sdp: answer },
+    });
+  };
+
+  const handleVoiceAnswer = async (from, sdp) => {
+    const peer = voice.peers.get(from);
+    if (!peer) return;
+    try {
+      await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    } catch (err) {
+      console.error("[voice] setRemoteDescription error:", err);
+      return;
+    }
+    peer.readyForCandidates = true;
+    while (peer.iceQueue.length > 0) {
+      try {
+        await peer.pc.addIceCandidate(peer.iceQueue.shift());
+      } catch (err) {
+        console.error("[voice] addIceCandidate error:", err);
+      }
+    }
+  };
+
+  const handleVoiceIce = async (from, candidate) => {
+    const peer = setupVoicePeer(from);
+    if (peer.readyForCandidates) {
+      try {
+        await peer.pc.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("[voice] addIceCandidate error:", err);
+      }
+    } else {
+      peer.iceQueue.push(candidate);
+    }
+  };
+
+  const createCallId = () => {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
+  const updateE2eeStatus = (text) => {
+    e2eeStatus.textContent = text;
+  };
+
+  const updateCallUI = () => {
+    const state = call.fsm.state;
+    callMuteBtn.disabled = state !== "in_call";
+    callHangupBtn.disabled = state !== "in_call";
+    outgoingCallEl.classList.toggle("hidden", state !== "outgoing");
+    incomingCallEl.classList.toggle("hidden", state !== "incoming");
+    if (state === "idle") {
+      callStatusEl.textContent = "Звонков нет.";
+    } else if (state === "outgoing") {
+      callStatusEl.textContent = `Звонок ${call.peerId}...`;
+    } else if (state === "incoming") {
+      callStatusEl.textContent = `Входящий от ${call.peerId}.`;
+    } else if (state === "in_call") {
+      callStatusEl.textContent = `Разговор с ${call.peerId}.`;
+    } else {
+      callStatusEl.textContent = "Завершаем звонок...";
+    }
+    if (state === "in_call" && call.localStream) {
+      const track = call.localStream.getAudioTracks()[0];
+      if (track) {
+        callMuteBtn.textContent = track.enabled ? "Выключить" : "Включить";
+      }
+    } else {
+      callMuteBtn.textContent = "Выключить";
+    }
+    renderUserList();
+  };
+
+  const setupCallAudio = () => {
+    callRemoteAudioEl.innerHTML = "";
+    if (!call.remoteStream) return;
+    const audio = document.createElement("audio");
+    audio.autoplay = true;
+    audio.srcObject = call.remoteStream;
+    callRemoteAudioEl.appendChild(audio);
+  };
+
+  const startCallMeter = async () => {
+    if (!call.localStream) return;
+    if (!call.audioCtx) {
+      call.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (call.audioCtx.state === "suspended") {
+      await call.audioCtx.resume();
+    }
+    const source = call.audioCtx.createMediaStreamSource(call.localStream);
+    const analyser = call.audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    call.localAnalyser = analyser;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    call.analyserTimer = setInterval(() => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const pct = Math.min(100, Math.round(rms * 200));
+      callMicMeterEl.style.width = `${pct}%`;
+    }, 200);
+  };
+
+  const stopCallMeter = () => {
+    if (call.analyserTimer) clearInterval(call.analyserTimer);
+    call.analyserTimer = null;
+    callMicMeterEl.style.width = "0%";
+  };
+
+  const updateSoundUnlock = () => {
+    if (AudioAlerts.isUnlocked()) {
+      soundUnlockEl.classList.add("hidden");
+    } else if (call.fsm.state === "incoming" || call.fsm.state === "outgoing") {
+      soundUnlockEl.classList.remove("hidden");
+    } else {
+      soundUnlockEl.classList.add("hidden");
+    }
+  };
+
+  const cleanupCall = (reason) => {
+    if (reason) console.log("[call] cleanup:", reason);
+    AudioAlerts.stopAllTones();
+    if (call.connection) {
+      call.connection.close();
+      call.connection = null;
+    }
+    if (call.localStream) {
+      call.localStream.getTracks().forEach((track) => track.stop());
+      call.localStream = null;
+    }
+    call.remoteStream = null;
+    callRemoteAudioEl.innerHTML = "";
+    call.peerId = null;
+    call.callId = null;
+    call.iceQueue = [];
+    call.e2eeKeyPair = null;
+    call.e2eeWrappingKey = null;
+    call.e2eeCallKey = null;
+    call.e2eeReady = false;
+    if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
+    call.e2eeTimeout = null;
+    if (call.inviteTimeout) clearTimeout(call.inviteTimeout);
+    call.inviteTimeout = null;
+    stopCallMeter();
+    updateE2eeStatus("E2EE выключено");
+    call.fsm.reset();
+    updateSoundUnlock();
+  };
+
+  const createCallConnection = (peerId) => {
+    call.connection = WebRTCCall.createConnection({
+      onIceCandidate: (candidate) => {
+        sendSignal({
+          type: "webrtc:ice",
+          to: peerId,
+          payload: { callId: call.callId, candidate },
+        });
+      },
+      onTrack: (stream) => {
+        call.remoteStream = stream;
+        setupCallAudio();
+      },
+      onSender: (sender) => {
+        if (call.e2eeEnabled && call.e2eeCallKey && E2EE.supports) {
+          E2EE.attachSenderTransform(sender, call.e2eeCallKey);
+        }
+      },
+      onReceiver: (receiver) => {
+        if (call.e2eeEnabled && call.e2eeCallKey && E2EE.supports) {
+          E2EE.attachReceiverTransform(receiver, call.e2eeCallKey);
+        }
+      },
+      onConnectionState: (state) => {
+        if (state === "failed" || state === "disconnected") {
+          sendSignal({ type: "call:hangup", to: peerId, payload: { callId: call.callId } });
+          cleanupCall("connection_failed");
+        }
+      },
+    });
+    if (call.localStream) {
+      call.connection.addLocalStream(call.localStream);
+    }
+    console.log("[call] peer created:", peerId);
+  };
+
+  const prepareLocalCallStream = async () => {
+    if (call.localStream) return;
+    call.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  };
+
+  const startOutgoingCall = async (peerId) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!peerId || !canPlaceCall()) return;
+    if (inviteCooldowns.has(peerId) && Date.now() - inviteCooldowns.get(peerId) < 10000) {
+      renderMessage({ kind: "system", body: `Слишком частые звонки пользователю ${peerId}.` });
+      return;
+    }
+    inviteCooldowns.set(peerId, Date.now());
+    await AudioAlerts.ensureAudioUnlocked();
+    call.peerId = peerId;
+    call.callId = createCallId();
+    call.e2eeEnabled = e2eeToggle.checked && E2EE.supports;
+    updateE2eeStatus(
+      call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
+    );
+    call.fsm.transition("outgoing", { callId: call.callId, peerId });
+    updateCallUI();
+    outgoingTextEl.textContent = `Звоним ${peerId}...`;
+    sendSignal({
+      type: "call:invite",
+      to: peerId,
+      payload: {
+        callId: call.callId,
+        e2ee: { enabled: call.e2eeEnabled, supported: E2EE.supports },
+      },
+    });
+    if (!(await AudioAlerts.playRingbackLoop())) {
+      updateSoundUnlock();
+    }
+    call.inviteTimeout = setTimeout(() => {
+      call.fsm.transition("timeout");
+      sendSignal({ type: "call:hangup", to: peerId, payload: { callId: call.callId } });
+      cleanupCall("timeout");
+      renderMessage({ kind: "system", body: "Звонок отменен по таймауту." });
+    }, CALL_TIMEOUT_MS);
+  };
+
+  const handleIncomingInvite = async (msg) => {
+    const from = msg.from;
+    const callId = msg.payload && msg.payload.callId;
+    if (!from || !callId) return;
+    if (isBlocked(from)) {
+      sendSignal({ type: "call:reject", to: from, payload: { callId, reason: "blocked" } });
+      return;
+    }
+    if (dndToggle.checked) {
+      sendSignal({ type: "call:reject", to: from, payload: { callId, reason: "dnd" } });
+      renderMessage({ kind: "system", body: `Пропущенный звонок от ${from} (DND).` });
+      return;
+    }
+    if (!canPlaceCall()) {
+      sendSignal({ type: "call:reject", to: from, payload: { callId, reason: "busy" } });
+      return;
+    }
+    call.peerId = from;
+    call.callId = callId;
+    const remoteE2ee = msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled;
+    call.e2eeEnabled = Boolean(remoteE2ee && e2eeToggle.checked && E2EE.supports);
+    updateE2eeStatus(
+      call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
+    );
+    call.fsm.transition("incoming", { callId, peerId: from });
+    updateCallUI();
+    incomingTextEl.textContent = `Входящий от ${from}`;
+    sendSignal({ type: "call:ringing", to: from, payload: { callId } });
+    if (!(await AudioAlerts.playRingtoneLoop())) {
+      updateSoundUnlock();
+    }
+  };
+
+  const acceptIncomingCall = async () => {
+    if (call.fsm.state !== "incoming") return;
+    await AudioAlerts.ensureAudioUnlocked();
+    AudioAlerts.stopAllTones();
+    sendSignal({ type: "call:accept", to: call.peerId, payload: { callId: call.callId } });
+    call.fsm.transition("accepted");
+    updateCallUI();
+    await prepareLocalCallStream();
+    createCallConnection(call.peerId);
+    startCallMeter();
+    if (call.e2eeEnabled) {
+      startE2EEHandshake();
+    }
+  };
+
+  const rejectIncomingCall = (reason = "rejected") => {
+    if (call.fsm.state !== "incoming") return;
+    AudioAlerts.stopAllTones();
+    sendSignal({ type: "call:reject", to: call.peerId, payload: { callId: call.callId, reason } });
+    call.fsm.transition("rejected");
+    cleanupCall("rejected");
+  };
+
+  const cancelOutgoingCall = () => {
+    if (call.fsm.state !== "outgoing") return;
+    AudioAlerts.stopAllTones();
+    sendSignal({ type: "call:cancel", to: call.peerId, payload: { callId: call.callId } });
+    call.fsm.transition("canceled");
+    cleanupCall("canceled");
+  };
+
+  const hangupCall = () => {
+    if (call.fsm.state !== "in_call") return;
+    sendSignal({ type: "call:hangup", to: call.peerId, payload: { callId: call.callId } });
+    call.fsm.transition("hangup");
+    cleanupCall("hangup");
+  };
+
+  const setCallMute = () => {
+    if (!call.localStream) return;
+    const track = call.localStream.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    callMuteBtn.textContent = track.enabled ? "Выключить" : "Включить";
+  };
+
+  const handleCallOffer = async (msg) => {
+    if (!call.peerId || msg.from !== call.peerId) return;
+    if (msg.payload.callId !== call.callId) return;
+    if (!call.connection) {
+      await prepareLocalCallStream();
+      createCallConnection(call.peerId);
+      startCallMeter();
+      if (call.e2eeEnabled) {
+        startE2EEHandshake();
+      }
+    }
+    try {
+      await call.connection.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
+    } catch (err) {
+      console.error("[call] setRemoteDescription error:", err);
+      return;
+    }
+    const answer = await call.connection.createAnswer();
+    sendSignal({
+      type: "webrtc:answer",
+      to: call.peerId,
+      payload: { callId: call.callId, sdp: answer },
+    });
+    for (const candidate of call.iceQueue) {
+      try {
+        await call.connection.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("[call] addIceCandidate error:", err);
+      }
+    }
+    call.iceQueue = [];
+  };
+
+  const handleCallAnswer = async (msg) => {
+    if (!call.connection) return;
+    if (msg.payload.callId !== call.callId) return;
+    try {
+      await call.connection.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
+    } catch (err) {
+      console.error("[call] setRemoteDescription error:", err);
+      return;
+    }
+    for (const candidate of call.iceQueue) {
+      try {
+        await call.connection.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("[call] addIceCandidate error:", err);
+      }
+    }
+    call.iceQueue = [];
+  };
+
+  const handleCallIce = async (msg) => {
+    if (msg.payload.callId !== call.callId) return;
+    if (!call.connection || !call.connection.pc.remoteDescription) {
+      call.iceQueue.push(msg.payload.candidate);
+      return;
+    }
+    try {
+      await call.connection.addIceCandidate(msg.payload.candidate);
+    } catch (err) {
+      console.error("[call] addIceCandidate error:", err);
+    }
+  };
+
+  const startE2EEHandshake = async () => {
+    if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
+    call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+    const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
+    sendSignal({
+      type: "e2ee:pubkey",
+      to: call.peerId,
+      payload: { callId: call.callId, publicKeyJwk },
+    });
+    if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
+    call.e2eeTimeout = setTimeout(() => {
+      if (!call.e2eeReady) {
+        call.e2eeEnabled = false;
+        updateE2eeStatus("E2EE таймаут, используем DTLS-SRTP");
+      }
+    }, 5000);
+  };
+
+  const handleE2eePubkey = async (msg) => {
+    if (msg.payload.callId !== call.callId) return;
+    if (!call.e2eeEnabled || !call.e2eeKeyPair) return;
+    const remoteKey = await KeyExchange.importPublicKey(msg.payload.publicKeyJwk);
+    const wrappingKey = await KeyExchange.deriveWrappingKey(call.e2eeKeyPair.privateKey, remoteKey);
+    call.e2eeWrappingKey = wrappingKey;
+    if (call.fsm.context.initiator) {
+      call.e2eeCallKey = KeyExchange.randomCallKey();
+      const wrapped = await KeyExchange.wrapCallKey(wrappingKey, call.e2eeCallKey);
+      sendSignal({
+        type: "e2ee:key",
+        to: call.peerId,
+        payload: { callId: call.callId, ivB64: wrapped.ivB64, encryptedKeyB64: wrapped.encryptedKeyB64 },
+      });
+      enableE2EETransforms();
+    }
+  };
+
+  const handleE2eeKey = async (msg) => {
+    if (msg.payload.callId !== call.callId) return;
+    if (!call.e2eeEnabled || !call.e2eeWrappingKey) return;
+    call.e2eeCallKey = await KeyExchange.unwrapCallKey(
+      call.e2eeWrappingKey,
+      msg.payload.ivB64,
+      msg.payload.encryptedKeyB64
+    );
+    enableE2EETransforms();
+  };
+
+  const enableE2EETransforms = () => {
+    if (!call.connection || !call.e2eeCallKey || call.e2eeReady) return;
+    call.e2eeReady = true;
+    updateE2eeStatus("E2EE включено");
+    if (call.connection.pc) {
+      call.connection.pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === "audio") {
+          E2EE.attachSenderTransform(sender, call.e2eeCallKey);
+        }
+      });
+      call.connection.pc.getReceivers().forEach((receiver) => {
+        if (receiver.track && receiver.track.kind === "audio") {
+          E2EE.attachReceiverTransform(receiver, call.e2eeCallKey);
+        }
+      });
+    }
+  };
+
+  const handleSignal = async (msg) => {
+    if (!msg || !msg.type) return;
+    if (msg.type === "voice:state") {
+      if (msg.payload && Array.isArray(msg.payload.participants)) {
+        voice.roster = new Map(
+          msg.payload.participants.map((p) => [p.id, { muted: p.muted, speaking: p.speaking }])
+        );
+        setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
+        renderVoiceParticipants();
+        if (voice.joined) {
+          for (const peerId of voice.roster.keys()) {
+            if (peerId === getNickname()) continue;
+            if (!voice.peers.has(peerId)) {
+              setupVoicePeer(peerId);
+              if (shouldCreateOffer(getNickname(), peerId)) {
+                const peer = voice.peers.get(peerId);
+                const offer = await peer.pc.createOffer();
+                sendSignal({
+                  type: "webrtc:offer",
+                  to: peerId,
+                  payload: { sdp: offer },
+                });
+              }
+            }
+          }
+        }
+      } else if (msg.from) {
+        const existing = voice.roster.get(msg.from) || {};
+        voice.roster.set(msg.from, { ...existing, ...msg.payload });
+        renderVoiceParticipants();
+      }
+      return;
+    }
+
+    if (msg.type === "voice:join") {
+      if (!msg.from) return;
+      const existing = voice.roster.get(msg.from) || {};
+      voice.roster.set(msg.from, { ...existing, muted: false, speaking: false });
+      setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
+      renderVoiceParticipants();
+      if (voice.joined && msg.from !== getNickname()) {
+        setupVoicePeer(msg.from);
+        if (shouldCreateOffer(getNickname(), msg.from)) {
+          const peer = voice.peers.get(msg.from);
+          const offer = await peer.pc.createOffer();
+          sendSignal({
+            type: "webrtc:offer",
+            to: msg.from,
+            payload: { sdp: offer },
+          });
+        }
+      }
+      return;
+    }
+
+    if (msg.type === "voice:leave") {
+      if (!msg.from) return;
+      voice.roster.delete(msg.from);
+      closeVoicePeer(msg.from);
+      setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
+      renderVoiceParticipants();
+      return;
+    }
+
+    if (msg.type === "webrtc:offer") {
+      if (!msg.payload || !msg.payload.sdp) return;
+      if (msg.payload && msg.payload.callId) {
+        await handleCallOffer(msg);
+      } else {
+        await handleVoiceOffer(msg.from, msg.payload.sdp);
+      }
+      return;
+    }
+
+    if (msg.type === "webrtc:answer") {
+      if (!msg.payload || !msg.payload.sdp) return;
+      if (msg.payload && msg.payload.callId) {
+        await handleCallAnswer(msg);
+      } else {
+        await handleVoiceAnswer(msg.from, msg.payload.sdp);
+      }
+      return;
+    }
+
+    if (msg.type === "webrtc:ice") {
+      if (!msg.payload || !msg.payload.candidate) return;
+      if (msg.payload && msg.payload.callId) {
+        await handleCallIce(msg);
+      } else {
+        await handleVoiceIce(msg.from, msg.payload.candidate);
+      }
+      return;
+    }
+
+    if (msg.type === "call:invite") {
+      await handleIncomingInvite(msg);
+      updateSoundUnlock();
+      return;
+    }
+
+    if (msg.type === "call:ringing") {
+      if (call.fsm.state === "outgoing") {
+        if (msg.payload && msg.payload.callId !== call.callId) return;
+        outgoingTextEl.textContent = `Звоним ${call.peerId}... (гудки)`;
+      }
+      return;
+    }
+
+    if (msg.type === "call:accept") {
+      if (call.fsm.state !== "outgoing") return;
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      AudioAlerts.stopAllTones();
+      if (call.inviteTimeout) clearTimeout(call.inviteTimeout);
+      call.inviteTimeout = null;
+      call.fsm.transition("accepted");
+      updateCallUI();
+      await prepareLocalCallStream();
+      createCallConnection(call.peerId);
+      startCallMeter();
+      if (call.e2eeEnabled) {
+        startE2EEHandshake();
+      }
+      const offer = await call.connection.createOffer();
+      sendSignal({
+        type: "webrtc:offer",
+        to: call.peerId,
+        payload: { callId: call.callId, sdp: offer },
+      });
+      AudioAlerts.playBeep("connect");
+      return;
+    }
+
+    if (msg.type === "call:reject") {
+      if (call.fsm.state === "outgoing" || call.fsm.state === "incoming") {
+        if (msg.payload && msg.payload.callId !== call.callId) return;
+        AudioAlerts.stopAllTones();
+        const reason = (msg.payload && msg.payload.reason) || "rejected";
+        renderMessage({ kind: "system", body: `Звонок отклонен (${reason}).` });
+        call.fsm.transition("rejected");
+        cleanupCall("rejected");
+      }
+      return;
+    }
+
+    if (msg.type === "call:cancel") {
+      if (call.fsm.state === "incoming") {
+        if (msg.payload && msg.payload.callId !== call.callId) return;
+        AudioAlerts.stopAllTones();
+        renderMessage({ kind: "system", body: "Вызов отменен." });
+        call.fsm.transition("canceled");
+        cleanupCall("canceled");
+      }
+      return;
+    }
+
+    if (msg.type === "call:hangup") {
+      if (call.fsm.state !== "idle") {
+        if (msg.payload && msg.payload.callId !== call.callId) return;
+        AudioAlerts.stopAllTones();
+        renderMessage({ kind: "system", body: "Звонок завершен." });
+        call.fsm.transition("remote_hangup");
+        cleanupCall("hangup");
+      }
+      return;
+    }
+
+    if (msg.type === "e2ee:pubkey") {
+      await handleE2eePubkey(msg);
+      return;
+    }
+
+    if (msg.type === "e2ee:key") {
+      await handleE2eeKey(msg);
+      return;
+    }
+  };
+
+  const handleCallStateChange = (state, ctx, prev, meta) => {
+    updateCallUI();
+    if (state === "ending") {
+      AudioAlerts.playBeep("end");
+    }
+    if (state === "idle" && meta && meta.reason === "timeout") {
+      renderMessage({ kind: "system", body: "Звонок завершен (таймаут)." });
+    }
+  };
+
+  call.fsm = CallFSM.create({ onStateChange: handleCallStateChange });
 
   const sendMessage = async () => {
     const body = messageEl.value.trim();
@@ -398,7 +1470,7 @@
     const to = getRecipient();
     const secret = getSecret();
 
-    updateNicknames(nickname);
+    addNickname(nickname);
 
     let payload = body;
     const isDirect = to !== "all";
@@ -465,6 +1537,110 @@
       return;
     }
     connect();
+  });
+
+  voiceJoinBtn.addEventListener("click", () => {
+    joinVoice();
+  });
+
+  voiceLeaveBtn.addEventListener("click", () => {
+    leaveVoice();
+  });
+
+  voiceMuteBtn.addEventListener("click", () => {
+    toggleVoiceMute();
+  });
+
+  voicePttBtn.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    pttDown();
+  });
+
+  voicePttBtn.addEventListener("mouseup", (event) => {
+    event.preventDefault();
+    pttUp();
+  });
+
+  voicePttBtn.addEventListener("mouseleave", () => {
+    pttUp();
+  });
+
+  voicePttBtn.addEventListener("touchstart", (event) => {
+    event.preventDefault();
+    pttDown();
+  });
+
+  voicePttBtn.addEventListener("touchend", (event) => {
+    event.preventDefault();
+    pttUp();
+  });
+
+  const isTypingTarget = () => {
+    const el = document.activeElement;
+    if (!el) return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA";
+  };
+
+  document.addEventListener("keydown", (event) => {
+    if (event.code !== "Space") return;
+    if (isTypingTarget()) return;
+    if (event.repeat) return;
+    pttDown();
+  });
+
+  document.addEventListener("keyup", (event) => {
+    if (event.code !== "Space") return;
+    if (isTypingTarget()) return;
+    pttUp();
+  });
+
+  callCancelBtn.addEventListener("click", () => {
+    cancelOutgoingCall();
+  });
+
+  callAcceptBtn.addEventListener("click", () => {
+    acceptIncomingCall();
+  });
+
+  callRejectBtn.addEventListener("click", () => {
+    rejectIncomingCall();
+  });
+
+  callHangupBtn.addEventListener("click", () => {
+    hangupCall();
+  });
+
+  callMuteBtn.addEventListener("click", () => {
+    setCallMute();
+  });
+
+  soundUnlockBtn.addEventListener("click", async () => {
+    await AudioAlerts.ensureAudioUnlocked();
+    updateSoundUnlock();
+  });
+
+  dndToggle.addEventListener("change", () => {
+    saveDnd(dndToggle.checked);
+  });
+
+  e2eeToggle.addEventListener("change", () => {
+    if (!E2EE.supports) {
+      e2eeToggle.checked = false;
+      updateE2eeStatus("E2EE не поддерживается");
+      return;
+    }
+    updateE2eeStatus(e2eeToggle.checked ? "E2EE готово" : "E2EE выключено");
+  });
+
+  window.addEventListener("beforeunload", () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      if (voice.joined) {
+        sendSignal({ type: "voice:leave" });
+      }
+      if (call.fsm && call.fsm.state !== "idle" && call.peerId && call.callId) {
+        sendSignal({ type: "call:hangup", to: call.peerId, payload: { callId: call.callId } });
+      }
+    }
   });
 
   const handleRecipientFocus = () => {
@@ -716,6 +1892,15 @@
   };
 
   initTab();
+  blockedUsers = loadBlocked();
+  dndToggle.checked = loadDnd();
+  if (!E2EE.supports) {
+    e2eeToggle.disabled = true;
+  }
+  updateE2eeStatus(E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается");
+  updateVoiceUI();
+  updateCallUI();
+  renderUserList();
   showAuth();
   updatePasswordRules("");
   const bootstrap = async () => {

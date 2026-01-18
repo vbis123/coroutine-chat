@@ -6,7 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node proxy/server.js",
-    "dev": "node --watch proxy/server.js"
+    "dev": "node --watch proxy/server.js",
+    "test": "node scripts/smoke-test.js",
+    "check": "npm test"
   },
   "dependencies": {
     "express": "^4.19.2",
