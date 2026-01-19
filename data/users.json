@@ -34,5 +34,11 @@
     "hash": "26a9698c2b2e2dae092bf5a4fcf4cd0c2d2d5e90ec3a58f6d5567e8c16b62a2a",
     "iterations": 100000,
     "createdAt": 1768672249221
+  },
+  "Smit": {
+    "salt": "0242c158b47ec93fdd81cd4cd954a770",
+    "hash": "5ac69b22f9e47747cbf60b061fbd98cc9e9ba53b5124056d4e0b94371bbfc58b",
+    "iterations": 100000,
+    "createdAt": 1768842001636
   }
 }
