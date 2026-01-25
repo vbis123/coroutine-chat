@@ -143,9 +143,8 @@
 
   const connect = () => {
     if (!hasNickname()) return;
-    const url = location.protocol === "https:" ? "wss://" : "ws://";
-    const wsHost = location.protocol === "https:" ? location.host : `${location.hostname}:8080`;
-    const wsUrl = `${url}${wsHost}`;
+      const wsProto = location.protocol === "https:" ? "wss://" : "ws://";
+      const wsUrl = `${wsProto}${location.host}/ws`;
 
     setStatus("connecting");
     ws = new WebSocket(wsUrl);

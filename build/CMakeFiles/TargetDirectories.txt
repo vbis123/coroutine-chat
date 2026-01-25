@@ -1,4 +1,4 @@
-/mnt/c/Users/vbis1/coroutine-chat/build/CMakeFiles/chat_server.dir
-/mnt/c/Users/vbis1/coroutine-chat/build/CMakeFiles/chat_client.dir
-/mnt/c/Users/vbis1/coroutine-chat/build/CMakeFiles/edit_cache.dir
-/mnt/c/Users/vbis1/coroutine-chat/build/CMakeFiles/rebuild_cache.dir
+/root/coroutine-chat/build/CMakeFiles/chat_server.dir
+/root/coroutine-chat/build/CMakeFiles/chat_client.dir
+/root/coroutine-chat/build/CMakeFiles/edit_cache.dir
+/root/coroutine-chat/build/CMakeFiles/rebuild_cache.dir
