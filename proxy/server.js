@@ -25,7 +25,37 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 100000;
 const PASSWORD_MIN_LENGTH = 8;
 
-const app = express();
+const app = express();// --- TURN REST config endpoint ---
+
+function buildTurnConfig() {
+  const secret = process.env.TURN_SECRET || "";
+  if (!secret) return null;
+
+  // TTL для кредов (сек). Обычно 1-6 часов.
+  const ttlSeconds = 6 * 60 * 60;
+  const username = `${Math.floor(Date.now() / 1000) + ttlSeconds}:coroutine-chat`;
+  const credential = crypto.createHmac("sha1", secret).update(username).digest("base64");
+
+  return {
+    urls: [
+      "turn:coroutine-chat.ru:3478?transport=udp",
+      "turn:coroutine-chat.ru:3478?transport=tcp",
+      "turns:coroutine-chat.ru:5349?transport=tcp",
+    ],
+    username,
+    credential,
+  };
+}
+
+// Вернём весь __APP_CONFIG__ как JSON
+app.get("/config.json", (req, res) => {
+  const turn = buildTurnConfig();
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    turn, // если secret не задан, будет null
+  });
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 

@@ -184,6 +184,18 @@
         </div>
       </div>
     </div>
+<script>
+(async () => {
+  try {
+    const r = await fetch("/config.json", { cache: "no-store" });
+    window.__APP_CONFIG__ = await r.json();
+    console.log("[config] loaded", window.__APP_CONFIG__);
+  } catch (e) {
+    window.__APP_CONFIG__ = window.__APP_CONFIG__ || { turn: null, voiceLimit: 6 };
+    console.warn("[config] failed, using fallback", e);
+  }
+})();
+</script>
 
     <script src="/config.js"></script>
     <script src="/js/protocol/signaling.js"></script>
@@ -194,4 +206,4 @@
     <script src="/js/webrtc_call.js"></script>
     <script src="/app.js"></script>
   </body>
-</html>
+
