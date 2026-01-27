@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# build artifacts
+build/
+dist/
+out/
+.cache/
+.tmp/
+
+# OS/editor
+.DS_Store
+.vscode/

@@ -1,0 +1,727 @@
+nohup: ignoring input
+listening on port 9000
+client error: 94.29.29.15:2336: End of file
+client disconnected: 94.29.29.15:2336
+client connected: Step (94.29.29.15:2113)
+client connected: Lex (94.29.29.15:2062)
+client error: 94.29.29.15:2062: End of file
+client disconnected: Lex (94.29.29.15:2062)
+client connected: Lex (94.29.29.15:2144)
+client error: 94.29.29.15:2113: End of file
+client disconnected: Step (94.29.29.15:2113)
+client connected: Alice (94.29.29.15:2504)
+client connected: Smit (94.29.29.15:2164)
+client connected: Pot11 (94.29.29.15:2356)
+client error: 94.29.29.15:2356: End of file
+client disconnected: Pot11 (94.29.29.15:2356)
+client connected: Pot11 (94.29.29.15:2075)
+client error: 94.29.29.15:2075: End of file
+client disconnected: Pot11 (94.29.29.15:2075)
+client connected: Pot11 (94.29.29.15:2155)
+client error: 94.29.29.15:2120: name already in use
+client disconnected: 94.29.29.15:2120
+client error: 94.29.29.15:2106: name already in use
+client disconnected: 94.29.29.15:2106
+client connected: Vladimir1 (94.29.29.15:2335)
+client error: 94.29.29.15:2348: name already in use
+client disconnected: 94.29.29.15:2348
+client error: 94.29.29.15:2049: name already in use
+client disconnected: 94.29.29.15:2049
+client error: 94.29.29.15:2050: name already in use
+client disconnected: 94.29.29.15:2050
+client error: 94.29.29.15:2091: name already in use
+client disconnected: 94.29.29.15:2091
+client error: 94.29.29.15:2163: name already in use
+client disconnected: 94.29.29.15:2163
+client error: 94.29.29.15:2175: name already in use
+client disconnected: 94.29.29.15:2175
+client error: 94.29.29.15:2049: name already in use
+client disconnected: 94.29.29.15:2049
+client error: 94.29.29.15:2055: name already in use
+client disconnected: 94.29.29.15:2055
+client error: 94.29.29.15:2112: name already in use
+client disconnected: 94.29.29.15:2112
+client error: 94.29.29.15:2139: name already in use
+client disconnected: 94.29.29.15:2139
+client error: 94.29.29.15:2106: End of file
+client disconnected: 94.29.29.15:2106
+client error: 94.29.29.15:2336: name already in use
+client disconnected: 94.29.29.15:2336
+client error: 94.29.29.15:2342: name already in use
+client disconnected: 94.29.29.15:2342
+client error: 94.29.29.15:2360: name already in use
+client disconnected: 94.29.29.15:2360
+client error: 94.29.29.15:2364: name already in use
+client disconnected: 94.29.29.15:2364
+client error: 94.29.29.15:2310: name already in use
+client disconnected: 94.29.29.15:2310
+client error: 94.29.29.15:2164: Connection timed out
+client disconnected: Smit (94.29.29.15:2164)
+client error: 94.29.29.15:2144: Connection timed out
+client disconnected: Lex (94.29.29.15:2144)
+client error: 94.29.29.15:2504: Connection timed out
+client disconnected: Alice (94.29.29.15:2504)
+client error: 94.29.29.15:2316: name already in use
+client disconnected: 94.29.29.15:2316
+client error: 94.29.29.15:2334: name already in use
+client disconnected: 94.29.29.15:2334
+client error: 94.29.29.15:2308: name already in use
+client disconnected: 94.29.29.15:2308
+client error: 94.29.29.15:2085: name already in use
+client disconnected: 94.29.29.15:2085
+client error: 94.29.29.15:2101: name already in use
+client disconnected: 94.29.29.15:2101
+client connected: Lex (94.29.29.15:2167)
+client error: 94.29.29.15:2320: name already in use
+client disconnected: 94.29.29.15:2320
+client error: 94.29.29.15:2332: name already in use
+client disconnected: 94.29.29.15:2332
+client error: 94.29.29.15:2335: Connection reset by peer
+client disconnected: Vladimir1 (94.29.29.15:2335)
+client connected: Vladimir1 (94.29.29.15:2335)
+client error: 94.29.29.15:2335: End of file
+client disconnected: Vladimir1 (94.29.29.15:2335)
+client connected: Vladimir1 (94.29.29.15:2127)
+client error: 94.29.29.15:2167: End of file
+client disconnected: Lex (94.29.29.15:2167)
+client connected: Lex (94.29.29.15:2107)
+client error: 94.29.29.15:2127: End of file
+client disconnected: Vladimir1 (94.29.29.15:2127)
+client connected: Vladimir1 (94.29.29.15:2117)
+client error: 94.29.29.15:2107: End of file
+client disconnected: Lex (94.29.29.15:2107)
+client connected: Lex (94.29.29.15:2052)
+client error: 94.29.29.15:2052: End of file
+client disconnected: Lex (94.29.29.15:2052)
+client connected: Lex (94.29.29.15:2088)
+client error: 94.29.29.15:2088: End of file
+client disconnected: Lex (94.29.29.15:2088)
+client error: 94.29.29.15:2124: name already in use
+client disconnected: 94.29.29.15:2124
+client error: 94.29.29.15:2311: name already in use
+client disconnected: 94.29.29.15:2311
+client error: 94.29.29.15:2324: name already in use
+client disconnected: 94.29.29.15:2324
+client error: 94.29.29.15:2336: name already in use
+client disconnected: 94.29.29.15:2336
+client error: 94.29.29.15:2337: name already in use
+client disconnected: 94.29.29.15:2337
+client error: 94.29.29.15:2345: name already in use
+client disconnected: 94.29.29.15:2345
+client error: 94.29.29.15:2349: name already in use
+client disconnected: 94.29.29.15:2349
+client error: 94.29.29.15:2353: name already in use
+client disconnected: 94.29.29.15:2353
+client error: 94.29.29.15:2155: Connection timed out
+client disconnected: Pot11 (94.29.29.15:2155)
+client error: 94.29.29.15:2358: name already in use
+client disconnected: 94.29.29.15:2358
+client error: 94.29.29.15:2364: name already in use
+client disconnected: 94.29.29.15:2364
+client error: 94.29.29.15:2313: name already in use
+client disconnected: 94.29.29.15:2313
+client error: 94.29.29.15:2325: name already in use
+client disconnected: 94.29.29.15:2325
+client error: 94.29.29.15:2355: name already in use
+client disconnected: 94.29.29.15:2355
+client error: 94.29.29.15:2124: name already in use
+client disconnected: 94.29.29.15:2124
+client error: 94.29.29.15:2138: name already in use
+client disconnected: 94.29.29.15:2138
+client error: 94.29.29.15:2141: name already in use
+client disconnected: 94.29.29.15:2141
+client error: 94.29.29.15:2147: name already in use
+client disconnected: 94.29.29.15:2147
+client error: 94.29.29.15:2117: End of file
+client disconnected: Vladimir1 (94.29.29.15:2117)
+client connected: Vladimir1 (94.29.29.15:2060)
+client error: 94.29.29.15:2060: End of file
+client disconnected: Vladimir1 (94.29.29.15:2060)
+client connected: Vladimir1 (94.29.29.15:2075)
+client error: 94.29.29.15:2068: name already in use
+client disconnected: 94.29.29.15:2068
+client error: 94.29.29.15:2073: name already in use
+client disconnected: 94.29.29.15:2073
+client error: 94.29.29.15:2077: name already in use
+client disconnected: 94.29.29.15:2077
+client error: 94.29.29.15:2163: name already in use
+client disconnected: 94.29.29.15:2163
+client error: 94.29.29.15:2164: name already in use
+client disconnected: 94.29.29.15:2164
+client error: 94.29.29.15:2174: name already in use
+client disconnected: 94.29.29.15:2174
+client error: 94.29.29.15:2134: name already in use
+client disconnected: 94.29.29.15:2134
+client error: 94.29.29.15:2068: name already in use
+client disconnected: 94.29.29.15:2068
+client error: 94.29.29.15:2081: name already in use
+client disconnected: 94.29.29.15:2081
+client error: 94.29.29.15:2082: name already in use
+client disconnected: 94.29.29.15:2082
+client error: 94.29.29.15:2085: name already in use
+client disconnected: 94.29.29.15:2085
+client error: 94.29.29.15:2088: name already in use
+client disconnected: 94.29.29.15:2088
+client connected: Lex (94.29.29.15:2111)
+client error: 94.29.29.15:2111: End of file
+client disconnected: Lex (94.29.29.15:2111)
+client connected: Lex (94.29.29.15:2067)
+client error: 94.29.29.15:2067: End of file
+client disconnected: Lex (94.29.29.15:2067)
+client connected: Lex (94.29.29.15:2138)
+client error: 94.29.29.15:2138: End of file
+client disconnected: Lex (94.29.29.15:2138)
+client connected: Lex (94.29.29.15:2306)
+client error: 94.29.29.15:2075: End of file
+client disconnected: Vladimir1 (94.29.29.15:2075)
+client connected: Vladimir1 (94.29.29.15:2350)
+client error: 94.29.29.15:2350: End of file
+client disconnected: Vladimir1 (94.29.29.15:2350)
+client connected: Vladimir1 (94.29.29.15:2333)
+client error: 94.29.29.15:2333: End of file
+client disconnected: Vladimir1 (94.29.29.15:2333)
+client connected: Vladimir1 (94.29.29.15:2332)
+client error: 94.29.29.15:2306: End of file
+client disconnected: Lex (94.29.29.15:2306)
+client connected: Lex (94.29.29.15:2153)
+client error: 94.29.29.15:2332: End of file
+client disconnected: Vladimir1 (94.29.29.15:2332)
+client connected: Vladimir1 (94.29.29.15:2053)
+client error: 127.0.0.1:40866: name already in use
+client disconnected: 127.0.0.1:40866
+client error: 127.0.0.1:40348: name already in use
+client disconnected: 127.0.0.1:40348
+client error: 127.0.0.1:40352: name already in use
+client disconnected: 127.0.0.1:40352
+client connected: Vladimir (127.0.0.1:55248)
+client error: 127.0.0.1:43322: name already in use
+client disconnected: 127.0.0.1:43322
+client error: 127.0.0.1:43328: name already in use
+client disconnected: 127.0.0.1:43328
+client error: 127.0.0.1:44092: name already in use
+client disconnected: 127.0.0.1:44092
+client error: 127.0.0.1:55702: name already in use
+client disconnected: 127.0.0.1:55702
+client error: 127.0.0.1:53794: name already in use
+client disconnected: 127.0.0.1:53794
+client error: 127.0.0.1:40940: name already in use
+client disconnected: 127.0.0.1:40940
+client error: 127.0.0.1:43676: name already in use
+client disconnected: 127.0.0.1:43676
+client error: 127.0.0.1:43680: name already in use
+client disconnected: 127.0.0.1:43680
+client error: 127.0.0.1:54276: name already in use
+client disconnected: 127.0.0.1:54276
+client error: 94.29.29.15:2153: Connection timed out
+client disconnected: Lex (94.29.29.15:2153)
+client error: 94.29.29.15:2053: Connection timed out
+client disconnected: Vladimir1 (94.29.29.15:2053)
+client connected: Lex123 (127.0.0.1:46696)
+client error: 127.0.0.1:55706: name already in use
+client disconnected: 127.0.0.1:55706
+client error: 127.0.0.1:55720: name already in use
+client disconnected: 127.0.0.1:55720
+client error: 127.0.0.1:55724: name already in use
+client disconnected: 127.0.0.1:55724
+client error: 127.0.0.1:58046: name already in use
+client disconnected: 127.0.0.1:58046
+client error: 127.0.0.1:58050: name already in use
+client disconnected: 127.0.0.1:58050
+client error: 127.0.0.1:40224: name already in use
+client disconnected: 127.0.0.1:40224
+client error: 127.0.0.1:41606: name already in use
+client disconnected: 127.0.0.1:41606
+client error: 127.0.0.1:41614: name already in use
+client disconnected: 127.0.0.1:41614
+client connected: Vladimir123 (127.0.0.1:56400)
+client error: 127.0.0.1:55248: End of file
+client disconnected: Vladimir (127.0.0.1:55248)
+client error: 127.0.0.1:56400: End of file
+client disconnected: Vladimir123 (127.0.0.1:56400)
+client error: 138.197.16.14:34470: message too large
+client disconnected: 138.197.16.14:34470
+client error: 138.197.16.14:34482: message too large
+client disconnected: 138.197.16.14:34482
+client error: 147.185.132.49:61642: message too large
+client disconnected: 147.185.132.49:61642
+client error: 3.143.33.63:45876: message too large
+client disconnected: 3.143.33.63:45876
+client error: 3.143.33.63:45856: End of file
+client disconnected: 3.143.33.63:45856
+client error: 3.143.33.63:39060: message too large
+client disconnected: 3.143.33.63:39060
+client error: 3.143.33.63:35766: message too large
+client disconnected: 3.143.33.63:35766
+client error: 3.143.33.63:57088: message too large
+client disconnected: 3.143.33.63:57088
+client error: 3.143.33.63:54488: message too large
+client disconnected: 3.143.33.63:54488
+client error: 127.0.0.1:46696: End of file
+client disconnected: Lex123 (127.0.0.1:46696)
+client error: 67.207.95.230:44746: End of file
+client disconnected: 67.207.95.230:44746
+client error: 20.64.104.70:38516: message too large
+client disconnected: 20.64.104.70:38516
+client error: 20.64.104.70:38524: message too large
+client disconnected: 20.64.104.70:38524
+client connected: Lex123 (127.0.0.1:56876)
+client connected: Vladimir (127.0.0.1:37644)
+client error: 68.183.35.25:60750: message too large
+client disconnected: 68.183.35.25:60750
+client error: 127.0.0.1:56876: End of file
+client disconnected: Lex123 (127.0.0.1:56876)
+client connected: Lex123 (127.0.0.1:36248)
+client error: 127.0.0.1:37644: End of file
+client disconnected: Vladimir (127.0.0.1:37644)
+client connected: Vladimir (127.0.0.1:34976)
+client error: 127.0.0.1:34976: End of file
+client disconnected: Vladimir (127.0.0.1:34976)
+client error: 91.196.152.176:44915: message too large
+client disconnected: 91.196.152.176:44915
+client error: 91.196.152.212:41233: message too large
+client disconnected: 91.196.152.212:41233
+client error: 20.80.105.83:40778: message too large
+client disconnected: 20.80.105.83:40778
+client error: 20.80.105.83:40790: message too large
+client disconnected: 20.80.105.83:40790
+client error: 120.39.48.177:43937: message too large
+client disconnected: 120.39.48.177:43937
+client error: 114.97.190.146:4817: message too large
+client disconnected: 114.97.190.146:4817
+client error: 124.117.192.40:61575: End of file
+client disconnected: 124.117.192.40:61575
+client error: 182.138.158.244:51991: End of file
+client disconnected: 182.138.158.244:51991
+client error: 182.138.158.154:31195: message too large
+client disconnected: 182.138.158.154:31195
+client error: 223.166.22.136:7527: message too large
+client disconnected: 223.166.22.136:7527
+client error: 1.24.16.244:25953: message too large
+client disconnected: 1.24.16.244:25953
+client error: 103.203.57.26:50216: message too large
+client disconnected: 103.203.57.26:50216
+client error: 103.203.57.26:50264: message too large
+client disconnected: 103.203.57.26:50264
+client error: 45.156.129.83:39291: message too large
+client disconnected: 45.156.129.83:39291
+client error: 45.156.129.82:47899: message too large
+client disconnected: 45.156.129.82:47899
+client error: 45.156.129.83:48229: message too large
+client disconnected: 45.156.129.83:48229
+client error: 45.156.129.82:57671: End of file
+client disconnected: 45.156.129.82:57671
+client error: 45.156.129.83:44957: message too large
+client disconnected: 45.156.129.83:44957
+client error: 45.156.129.82:35351: End of file
+client disconnected: 45.156.129.82:35351
+client error: 45.156.129.80:53480: message too large
+client disconnected: 45.156.129.80:53480
+client error: 45.156.129.82:49795: message too large
+client disconnected: 45.156.129.82:49795
+client error: 45.156.129.81:38091: message too large
+client disconnected: 45.156.129.81:38091
+client error: 45.156.129.80:54798: End of file
+client disconnected: 45.156.129.80:54798
+client error: 45.156.129.80:58834: message too large
+client disconnected: 45.156.129.80:58834
+client error: 209.38.144.105:52646: message too large
+client disconnected: 209.38.144.105:52646
+client error: 3.149.59.26:57056: message too large
+client disconnected: 3.149.59.26:57056
+client error: 3.149.59.26:32890: End of file
+client disconnected: 3.149.59.26:32890
+client error: 3.149.59.26:33020: message too large
+client disconnected: 3.149.59.26:33020
+client error: 3.149.59.26:55440: message too large
+client disconnected: 3.149.59.26:55440
+client error: 3.149.59.26:37126: message too large
+client disconnected: 3.149.59.26:37126
+client error: 3.149.59.26:47270: message too large
+client disconnected: 3.149.59.26:47270
+client connected: Vladimir (127.0.0.1:53926)
+client error: 198.235.24.99:57950: message too large
+client disconnected: 198.235.24.99:57950
+client error: 64.227.18.98:47646: message too large
+client disconnected: 64.227.18.98:47646
+client error: 64.227.18.98:47652: message too large
+client disconnected: 64.227.18.98:47652
+client error: 64.227.18.98:47664: End of file
+client disconnected: 64.227.18.98:47664
+client error: 64.227.18.98:48614: message too large
+client disconnected: 64.227.18.98:48614
+client error: 64.227.18.98:48622: message too large
+client disconnected: 64.227.18.98:48622
+client error: 64.227.18.98:48636: message too large
+client disconnected: 64.227.18.98:48636
+client error: 64.227.18.98:48650: message too large
+client disconnected: 64.227.18.98:48650
+client error: 64.227.18.98:48658: message too large
+client disconnected: 64.227.18.98:48658
+client error: 64.227.18.98:48666: message too large
+client disconnected: 64.227.18.98:48666
+client error: 64.227.18.98:48676: message too large
+client disconnected: 64.227.18.98:48676
+client error: 64.227.18.98:48682: message too large
+client disconnected: 64.227.18.98:48682
+client error: 64.227.18.98:48684: message too large
+client disconnected: 64.227.18.98:48684
+client error: 64.227.18.98:48688: message too large
+client disconnected: 64.227.18.98:48688
+client error: 64.227.18.98:48690: End of file
+client disconnected: 64.227.18.98:48690
+client error: 64.227.18.98:48692: message too large
+client disconnected: 64.227.18.98:48692
+client error: 64.227.18.98:48702: message too large
+client disconnected: 64.227.18.98:48702
+client error: 45.79.115.59:51650: Connection reset by peer
+client disconnected: 45.79.115.59:51650
+client error: 45.79.115.59:51651: message too large
+client disconnected: 45.79.115.59:51651
+client error: 45.79.115.59:51652: message too large
+client disconnected: 45.79.115.59:51652
+client error: 45.79.115.59:51651: message too large
+client disconnected: 45.79.115.59:51651
+client error: 45.79.115.59:51654: message too large
+client disconnected: 45.79.115.59:51654
+client error: 45.79.115.59:51656: message too large
+client disconnected: 45.79.115.59:51656
+client error: 45.79.115.59:51657: message too large
+client disconnected: 45.79.115.59:51657
+client error: 45.79.115.59:51658: message too large
+client disconnected: 45.79.115.59:51658
+client error: 45.79.115.59:51657: message too large
+client disconnected: 45.79.115.59:51657
+client error: 45.79.115.59:51658: message too large
+client disconnected: 45.79.115.59:51658
+client error: 45.79.115.59:51658: message too large
+client disconnected: 45.79.115.59:51658
+client error: 45.79.115.59:51656: message too large
+client disconnected: 45.79.115.59:51656
+client error: 45.79.115.59:51657: message too large
+client disconnected: 45.79.115.59:51657
+client error: 45.79.115.59:51658: message too large
+client disconnected: 45.79.115.59:51658
+client error: 45.79.115.59:51658: message too large
+client disconnected: 45.79.115.59:51658
+client error: 172.104.11.46:64830: message too large
+client disconnected: 172.104.11.46:64830
+client error: 172.104.11.46:64840: message too large
+client disconnected: 172.104.11.46:64840
+client error: 206.189.26.130:58482: message too large
+client disconnected: 206.189.26.130:58482
+client error: 206.189.26.130:58494: message too large
+client disconnected: 206.189.26.130:58494
+client error: 206.189.26.130:58498: message too large
+client disconnected: 206.189.26.130:58498
+client error: 206.189.26.130:58508: message too large
+client disconnected: 206.189.26.130:58508
+client error: 165.154.164.24:36116: message too large
+client disconnected: 165.154.164.24:36116
+client error: 165.154.164.24:36122: End of file
+client disconnected: 165.154.164.24:36122
+client error: 165.154.164.24:59986: message too large
+client disconnected: 165.154.164.24:59986
+client error: 165.154.164.24:59996: message too large
+client disconnected: 165.154.164.24:59996
+client error: 165.154.164.24:60002: message too large
+client disconnected: 165.154.164.24:60002
+client error: 165.154.164.24:60006: message too large
+client disconnected: 165.154.164.24:60006
+client error: 165.154.164.24:60008: message too large
+client disconnected: 165.154.164.24:60008
+client error: 165.154.164.24:60018: message too large
+client disconnected: 165.154.164.24:60018
+client error: 165.154.164.24:60030: message too large
+client disconnected: 165.154.164.24:60030
+client error: 165.154.164.24:60032: message too large
+client disconnected: 165.154.164.24:60032
+client error: 165.154.164.24:60040: message too large
+client disconnected: 165.154.164.24:60040
+client error: 185.247.137.148:59793: message too large
+client disconnected: 185.247.137.148:59793
+client error: 45.55.158.168:60471: message too large
+client disconnected: 45.55.158.168:60471
+client error: 64.227.99.138:52705: message too large
+client disconnected: 64.227.99.138:52705
+client error: 192.241.179.235:36625: message too large
+client disconnected: 192.241.179.235:36625
+client error: 159.65.219.252:52771: message too large
+client disconnected: 159.65.219.252:52771
+client error: 159.65.219.252:60371: message too large
+client disconnected: 159.65.219.252:60371
+client error: 128.199.8.140:49729: message too large
+client disconnected: 128.199.8.140:49729
+client error: 192.241.179.235:40073: message too large
+client disconnected: 192.241.179.235:40073
+client error: 128.199.8.140:55005: End of file
+client disconnected: 128.199.8.140:55005
+client error: 128.199.8.140:41065: message too large
+client disconnected: 128.199.8.140:41065
+client error: 192.241.179.235:38659: message too large
+client disconnected: 192.241.179.235:38659
+client error: 45.55.151.3:42741: message too large
+client disconnected: 45.55.151.3:42741
+client error: 45.55.185.224:39907: message too large
+client disconnected: 45.55.185.224:39907
+client error: 157.245.243.118:53549: message too large
+client disconnected: 157.245.243.118:53549
+client error: 64.227.108.146:56961: End of file
+client disconnected: 64.227.108.146:56961
+client error: 45.55.185.224:36015: message too large
+client disconnected: 45.55.185.224:36015
+client error: 157.245.245.246:56965: End of file
+client disconnected: 157.245.245.246:56965
+client connected: ÿSMBr                            NT LM 0.12   (162.243.208.127:42731)
+client error: 162.243.208.127:42731: End of file
+client disconnected: ÿSMBr                            NT LM 0.12   (162.243.208.127:42731)
+client error: 162.243.208.127:48257: invalid name
+client disconnected: 162.243.208.127:48257
+client error: 64.227.109.89:48577: message too large
+client disconnected: 64.227.109.89:48577
+client error: 64.227.99.138:59021: message too large
+client disconnected: 64.227.99.138:59021
+client error: 157.245.245.246:45615: message too large
+client disconnected: 157.245.245.246:45615
+client error: 45.55.185.224:50135: message too large
+client disconnected: 45.55.185.224:50135
+client error: 162.243.114.171:47837: message too large
+client disconnected: 162.243.114.171:47837
+client error: 162.243.114.171:51913: message too large
+client disconnected: 162.243.114.171:51913
+client error: 45.55.185.224:60277: message too large
+client disconnected: 45.55.185.224:60277
+client error: 107.170.65.169:54745: message too large
+client disconnected: 107.170.65.169:54745
+client error: 64.227.108.146:39441: message too large
+client disconnected: 64.227.108.146:39441
+client error: 162.243.116.182:43435: message too large
+client disconnected: 162.243.116.182:43435
+client error: 157.245.243.118:34029: message too large
+client disconnected: 157.245.243.118:34029
+client error: 64.227.110.161:47067: message too large
+client disconnected: 64.227.110.161:47067
+client error: 159.65.216.50:60047: message too large
+client disconnected: 159.65.216.50:60047
+client error: 167.99.234.119:33649: message too large
+client disconnected: 167.99.234.119:33649
+client error: 128.199.8.140:42769: message too large
+client disconnected: 128.199.8.140:42769
+client error: 128.199.8.140:53287: message too large
+client disconnected: 128.199.8.140:53287
+client error: 157.245.243.118:33859: message too large
+client disconnected: 157.245.243.118:33859
+client error: 64.227.109.89:36761: message too large
+client disconnected: 64.227.109.89:36761
+client error: 162.243.116.182:45587: End of file
+client disconnected: 162.243.116.182:45587
+client error: 167.99.234.119:45545: message too large
+client disconnected: 167.99.234.119:45545
+client error: 64.227.108.146:42011: message too large
+client disconnected: 64.227.108.146:42011
+client error: 64.227.108.146:49463: message too large
+client disconnected: 64.227.108.146:49463
+client error: 64.227.108.146:42747: message too large
+client disconnected: 64.227.108.146:42747
+client error: 162.243.114.171:33555: message too large
+client disconnected: 162.243.114.171:33555
+client error: 157.230.178.76:61000: Connection timed out
+client disconnected: 157.230.178.76:61000
+client error: 127.0.0.1:53926: End of file
+client disconnected: Vladimir (127.0.0.1:53926)
+client error: 45.79.115.59:51659: Connection timed out
+client disconnected: 45.79.115.59:51659
+client error: 45.79.115.59:51653: Connection timed out
+client disconnected: 45.79.115.59:51653
+client error: 45.79.115.59:51655: Connection timed out
+client disconnected: 45.79.115.59:51655
+client error: 209.38.136.82:51956: End of file
+client disconnected: 209.38.136.82:51956
+client error: 3.23.104.96:34068: End of file
+client disconnected: 3.23.104.96:34068
+client connected: Vladimir (127.0.0.1:41048)
+client connected: Evgenyy1 (127.0.0.1:35372)
+client error: 127.0.0.1:60442: name already in use
+client disconnected: 127.0.0.1:60442
+client error: 127.0.0.1:56922: name already in use
+client disconnected: 127.0.0.1:56922
+client error: 127.0.0.1:39014: name already in use
+client disconnected: 127.0.0.1:39014
+client error: 127.0.0.1:35372: End of file
+client disconnected: Evgenyy1 (127.0.0.1:35372)
+client error: 127.0.0.1:59136: name already in use
+client disconnected: 127.0.0.1:59136
+client error: 127.0.0.1:59142: name already in use
+client disconnected: 127.0.0.1:59142
+client error: 127.0.0.1:60522: name already in use
+client disconnected: 127.0.0.1:60522
+client error: 127.0.0.1:45936: name already in use
+client disconnected: 127.0.0.1:45936
+client connected: Evgenyy1 (127.0.0.1:45944)
+client error: 127.0.0.1:36248: End of file
+client disconnected: Lex123 (127.0.0.1:36248)
+client error: 127.0.0.1:36314: name already in use
+client disconnected: 127.0.0.1:36314
+client error: 127.0.0.1:48122: name already in use
+client disconnected: 127.0.0.1:48122
+client error: 127.0.0.1:48130: name already in use
+client disconnected: 127.0.0.1:48130
+client error: 127.0.0.1:33288: name already in use
+client disconnected: 127.0.0.1:33288
+client connected: Let123 (127.0.0.1:44898)
+client error: 127.0.0.1:41048: End of file
+client disconnected: Vladimir (127.0.0.1:41048)
+client error: 216.180.246.42:16530: message too large
+client disconnected: 216.180.246.42:16530
+client error: 216.180.246.42:30692: message too large
+client disconnected: 216.180.246.42:30692
+client connected: Lex123 (127.0.0.1:40196)
+client error: 127.0.0.1:40574: name already in use
+client disconnected: 127.0.0.1:40574
+client error: 216.180.246.42:21906: Connection timed out
+client disconnected: 216.180.246.42:21906
+client error: 127.0.0.1:45944: End of file
+client disconnected: Evgenyy1 (127.0.0.1:45944)
+client connected: Evgenyy1 (127.0.0.1:58694)
+client error: 127.0.0.1:58694: End of file
+client disconnected: Evgenyy1 (127.0.0.1:58694)
+client error: 127.0.0.1:44898: End of file
+client disconnected: Let123 (127.0.0.1:44898)
+client connected: Evgenyy1 (127.0.0.1:33610)
+client error: 127.0.0.1:33610: End of file
+client disconnected: Evgenyy1 (127.0.0.1:33610)
+client connected: Evgenyy1 (127.0.0.1:42308)
+client error: 127.0.0.1:42308: End of file
+client disconnected: Evgenyy1 (127.0.0.1:42308)
+client connected: Evgenyy1 (127.0.0.1:40774)
+client error: 127.0.0.1:40774: End of file
+client disconnected: Evgenyy1 (127.0.0.1:40774)
+client connected: Evgenyy1 (127.0.0.1:47030)
+client error: 127.0.0.1:47030: End of file
+client disconnected: Evgenyy1 (127.0.0.1:47030)
+client connected: Evgenyy1 (127.0.0.1:52408)
+client error: 127.0.0.1:52408: End of file
+client disconnected: Evgenyy1 (127.0.0.1:52408)
+client connected: Evgenyy1 (127.0.0.1:52414)
+client error: 205.210.31.70:59794: message too large
+client disconnected: 205.210.31.70:59794
+client error: 127.0.0.1:52414: End of file
+client disconnected: Evgenyy1 (127.0.0.1:52414)
+client connected: Evgenyy1 (127.0.0.1:60920)
+client error: 127.0.0.1:60920: End of file
+client disconnected: Evgenyy1 (127.0.0.1:60920)
+client connected: Evgenyy1 (127.0.0.1:59758)
+client error: 127.0.0.1:51042: name already in use
+client disconnected: 127.0.0.1:51042
+client error: 127.0.0.1:59758: End of file
+client disconnected: Evgenyy1 (127.0.0.1:59758)
+client error: 85.142.100.12:39159: message too large
+client disconnected: 85.142.100.12:39159
+client error: 85.142.100.12:39160: message too large
+client disconnected: 85.142.100.12:39160
+client error: 85.142.100.12:60462: message too large
+client disconnected: 85.142.100.12:60462
+client error: 85.142.100.12:60468: message too large
+client disconnected: 85.142.100.12:60468
+client error: 127.0.0.1:40196: End of file
+client disconnected: Lex123 (127.0.0.1:40196)
+client connected: Lex123 (127.0.0.1:43158)
+client error: 127.0.0.1:43158: End of file
+client disconnected: Lex123 (127.0.0.1:43158)
+client error: 47.99.115.135:54674: message too large
+client disconnected: 47.99.115.135:54674
+client error: 47.99.115.135:54980: message too large
+client disconnected: 47.99.115.135:54980
+client error: 47.99.115.135:54996: message too large
+client disconnected: 47.99.115.135:54996
+client error: 47.99.115.135:55002: message too large
+client disconnected: 47.99.115.135:55002
+client error: 47.99.115.135:55006: message too large
+client disconnected: 47.99.115.135:55006
+client error: 47.99.115.135:55010: message too large
+client disconnected: 47.99.115.135:55010
+client error: 47.99.115.135:55044: End of file
+client disconnected: 47.99.115.135:55044
+client error: 47.99.115.135:55126: message too large
+client disconnected: 47.99.115.135:55126
+client error: 47.99.115.135:55130: message too large
+client disconnected: 47.99.115.135:55130
+client error: 47.99.115.135:55144: message too large
+client disconnected: 47.99.115.135:55144
+client error: 47.99.115.135:55456: message too large
+client disconnected: 47.99.115.135:55456
+client error: 47.99.115.135:55548: invalid name
+client disconnected: 47.99.115.135:55548
+client error: 47.99.115.135:55750: invalid name
+client disconnected: 47.99.115.135:55750
+client error: 47.99.115.135:55882: message too large
+client disconnected: 47.99.115.135:55882
+client error: 47.99.115.135:55912: message too large
+client disconnected: 47.99.115.135:55912
+client error: 47.99.115.135:55954: message too large
+client disconnected: 47.99.115.135:55954
+client error: 47.99.115.135:55964: message too large
+client disconnected: 47.99.115.135:55964
+client error: 47.99.115.135:55978: message too large
+client disconnected: 47.99.115.135:55978
+client error: 47.99.115.135:56026: message too large
+client disconnected: 47.99.115.135:56026
+client error: 47.99.115.135:56040: message too large
+client disconnected: 47.99.115.135:56040
+client error: 47.99.115.135:56050: message too large
+client disconnected: 47.99.115.135:56050
+client error: 47.99.115.135:56074: message too large
+client disconnected: 47.99.115.135:56074
+client error: 47.99.115.135:56092: message too large
+client disconnected: 47.99.115.135:56092
+client error: 47.99.115.135:56118: message too large
+client disconnected: 47.99.115.135:56118
+client error: 47.99.115.135:56148: message too large
+client disconnected: 47.99.115.135:56148
+client error: 47.99.115.135:56376: message too large
+client disconnected: 47.99.115.135:56376
+client error: 47.99.115.135:56378: message too large
+client disconnected: 47.99.115.135:56378
+client error: 47.99.115.135:56380: End of file
+client disconnected: 47.99.115.135:56380
+client error: 47.99.115.135:56460: message too large
+client disconnected: 47.99.115.135:56460
+client error: 47.99.115.135:56888: End of file
+client disconnected: 47.99.115.135:56888
+client error: 47.99.115.135:57164: message too large
+client disconnected: 47.99.115.135:57164
+client error: 47.99.115.135:57194: message too large
+client disconnected: 47.99.115.135:57194
+client error: 47.99.115.135:57198: message too large
+client disconnected: 47.99.115.135:57198
+client error: 47.99.115.135:954: message too large
+client disconnected: 47.99.115.135:954
+client error: 121.199.172.125:38090: message too large
+client disconnected: 121.199.172.125:38090
+client error: 121.199.172.125:38114: message too large
+client disconnected: 121.199.172.125:38114
+client error: 135.119.96.21:57960: message too large
+client disconnected: 135.119.96.21:57960
+client error: 135.119.96.21:57974: message too large
+client disconnected: 135.119.96.21:57974
+client error: 151.242.144.223:35596: message too large
+client disconnected: 151.242.144.223:35596
+client error: 20.40.210.26:54138: End of file
+client disconnected: 20.40.210.26:54138
+client error: 20.40.210.26:55222: message too large
+client disconnected: 20.40.210.26:55222
+client error: 20.65.195.47:37990: message too large
+client disconnected: 20.65.195.47:37990
+client error: 20.65.195.47:37998: message too large
+client disconnected: 20.65.195.47:37998
+client error: 3.143.33.63:39950: End of file
+client disconnected: 3.143.33.63:39950
+client error: 3.143.33.63:60778: message too large
+client disconnected: 3.143.33.63:60778
+client error: 3.143.33.63:38430: message too large
+client disconnected: 3.143.33.63:38430
+client error: 3.143.33.63:47580: message too large
+client disconnected: 3.143.33.63:47580
+client error: 3.143.33.63:51366: message too large
+client disconnected: 3.143.33.63:51366
+client error: 3.143.33.63:36490: message too large
+client disconnected: 3.143.33.63:36490

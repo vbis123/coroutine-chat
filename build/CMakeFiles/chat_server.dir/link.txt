@@ -1,1 +1,1 @@
-/usr/bin/g++ -g CMakeFiles/chat_server.dir/src/server.cpp.o -o chat_server  /usr/lib/x86_64-linux-gnu/libboost_system.so.1.83.0 
+/usr/bin/c++ CMakeFiles/chat_server.dir/src/server.cpp.o -o chat_server  /usr/lib64/libboost_system.so.1.75.0

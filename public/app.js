@@ -1,4 +1,4 @@
-(() => {
+(async () => {
   const statusEl = document.getElementById("status");
   const chatEl = document.getElementById("chat");
   const formEl = document.getElementById("form");
@@ -73,7 +73,16 @@
   const AUTH_TAB_KEY = "authTab";
   const DND_KEY = "callDnd";
   const BLOCKED_KEY = "callBlocked";
-  const appConfig = window.__APP_CONFIG__ || {};
+  const loadAppConfig = async () => {
+    if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
+    try {
+      const r = await fetch("/config.json", { cache: "no-store" });
+      if (r.ok) window.__APP_CONFIG__ = await r.json();
+    } catch (_) {}
+    return window.__APP_CONFIG__ || {};
+  };
+
+  const appConfig = await loadAppConfig();
   const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
   const VOICE_ROOM = "global";
   const CALL_TIMEOUT_MS = 30000;
@@ -143,9 +152,8 @@
 
   const connect = () => {
     if (!hasNickname()) return;
-    const url = location.protocol === "https:" ? "wss://" : "ws://";
-    const wsHost = location.protocol === "https:" ? location.host : `${location.hostname}:8080`;
-    const wsUrl = `${url}${wsHost}`;
+      const wsProto = location.protocol === "https:" ? "wss://" : "ws://";
+      const wsUrl = `${wsProto}${location.host}/ws`;
 
     setStatus("connecting");
     ws = new WebSocket(wsUrl);
