@@ -37,6 +37,7 @@
   const voiceMicStatus = document.getElementById("voice-mic-status");
   const voiceWarning = document.getElementById("voice-warning");
   const voiceParticipantsEl = document.getElementById("voice-participants");
+  const voiceRemoteAudioEl = document.getElementById("voice-remote-audio");
   const dndToggle = document.getElementById("dnd-toggle");
   const callStatusEl = document.getElementById("call-status");
   const callMuteBtn = document.getElementById("call-mute");
@@ -102,6 +103,7 @@
     roster: new Map(),
     speaking: new Map(),
     analyserTimers: new Map(),
+    remoteAudioEls: new Map(),
     pttActive: false,
     pttRestoreMuted: true,
     audioCtx: null,
@@ -635,6 +637,40 @@
     voice.analyserTimers.delete(id);
   };
 
+  const attachVoiceAudio = (peerId, stream) => {
+    if (!voiceRemoteAudioEl || !stream) return;
+    let audio = voice.remoteAudioEls.get(peerId);
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      audio.preload = "auto";
+      audio.setAttribute("playsinline", "");
+      audio.setAttribute("webkit-playsinline", "");
+      audio.dataset.peerId = peerId;
+      voiceRemoteAudioEl.appendChild(audio);
+      voice.remoteAudioEls.set(peerId, audio);
+    }
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
+  };
+
+  const detachVoiceAudio = (peerId) => {
+    const audio = voice.remoteAudioEls.get(peerId);
+    if (!audio) return;
+    audio.srcObject = null;
+    audio.remove();
+    voice.remoteAudioEls.delete(peerId);
+  };
+
+  const clearVoiceAudio = () => {
+    for (const peerId of Array.from(voice.remoteAudioEls.keys())) {
+      detachVoiceAudio(peerId);
+    }
+  };
+
   const sendVoiceState = (muted, speaking) => {
     if (!voice.joined) return;
     const now = Date.now();
@@ -663,6 +699,7 @@
         if (peer) {
           peer.remoteStream = stream;
         }
+        attachVoiceAudio(peerId, stream);
         monitorSpeaking(stream, peerId, (speaking) => {
           const existing = voice.roster.get(peerId) || {};
           voice.roster.set(peerId, { ...existing, speaking });
@@ -692,6 +729,7 @@
     } catch (_) {}
     voice.peers.delete(peerId);
     stopSpeakingMonitor(peerId);
+    detachVoiceAudio(peerId);
   };
 
   const shouldCreateOffer = (localId, remoteId) => localId.localeCompare(remoteId) < 0;
@@ -767,6 +805,7 @@
     voice.roster.clear();
     renderVoiceParticipants();
     setVoiceWarning(false);
+    clearVoiceAudio();
     updateVoiceUI();
   };
 
