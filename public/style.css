@@ -648,4 +648,8 @@ button:hover {
   .msg {
     max-width: 100%;
   }
+
+  .menu-tab {
+    font-size: 16px;
+  }
 }
