@@ -93,14 +93,43 @@
             />
           </label>
         </div>
-        <label class="toggle">
-          <input id="show-encrypted" type="checkbox" />
-          <span>Показывать заглушку для зашифрованных сообщений</span>
-        </label>
+        <div class="menu-tabs" role="tablist" aria-label="Разделы общения">
+          <button class="menu-tab active" type="button" id="menu-chat" role="tab" aria-controls="panel-chat">
+            Чат
+          </button>
+          <button class="menu-tab" type="button" id="menu-voice" role="tab" aria-controls="panel-voice">
+            Голосовой чат
+          </button>
+          <button class="menu-tab" type="button" id="menu-calls" role="tab" aria-controls="panel-calls">
+            Звонки
+          </button>
+        </div>
 
-        <div class="voice-call-grid">
+        <section class="panel-section" id="panel-chat" role="tabpanel">
+          <label class="toggle">
+            <input id="show-encrypted" type="checkbox" />
+            <span>Показывать заглушку для зашифрованных сообщений</span>
+          </label>
+
+          <div class="chat" id="chat"></div>
+
+          <form id="form" class="composer">
+            <textarea
+              id="message"
+              rows="3"
+              placeholder="Напишите сообщение..."
+            ></textarea>
+            <button type="submit">Отправить</button>
+          </form>
+          <div class="hint">Сообщение: Enter — отправить, Shift+Enter — новая строка</div>
+        </section>
+
+        <section class="panel-section hidden" id="panel-voice" role="tabpanel">
           <section class="voice-panel">
             <div class="panel-title">Голос</div>
+            <div class="voice-secret-hint hidden" id="voice-secret-hint">
+              Для голосового чата заполните поле «Секрет» одинаковым кодовым словом.
+            </div>
             <div class="voice-controls">
               <button id="voice-join" type="button">Войти в голос</button>
               <button id="voice-leave" type="button" class="hidden">Выйти</button>
@@ -114,62 +143,54 @@
             <div class="voice-participants" id="voice-participants"></div>
             <div id="voice-remote-audio"></div>
           </section>
-
-          <section class="call-panel">
-            <div class="panel-title">Звонки</div>
-            <label class="toggle">
-              <input id="dnd-toggle" type="checkbox" />
-              <span>Не беспокоить</span>
-            </label>
-            <div class="call-status" id="call-status">Звонков нет.</div>
-            <div class="call-controls">
-              <button id="call-mute" type="button" disabled>Выключить</button>
-              <button id="call-hangup" type="button" class="danger" disabled>Завершить</button>
-            </div>
-            <div class="meter">
-              <div class="meter-fill" id="call-mic-meter"></div>
-            </div>
-            <label class="toggle e2ee-toggle">
-              <input id="e2ee-toggle" type="checkbox" />
-              <span>E2EE (extra)</span>
-            </label>
-            <div class="call-security">
-              <div>Транспорт: Encrypted (DTLS-SRTP)</div>
-              <div id="e2ee-status">E2EE выключено</div>
-            </div>
-            <div class="call-banner hidden" id="outgoing-call">
-              <span id="outgoing-text">Звоним...</span>
-              <button id="call-cancel" type="button">Отменить</button>
-            </div>
-            <div class="call-banner hidden" id="incoming-call">
-              <span id="incoming-text">Incoming call</span>
-              <button id="call-accept" type="button">Принять</button>
-              <button id="call-reject" type="button">Отклонить</button>
-            </div>
-            <div class="sound-unlock hidden" id="sound-unlock">
-              <span>Нажмите, чтобы включить звуки</span>
-              <button id="sound-unlock-btn" type="button">Включить</button>
-            </div>
-            <div id="call-remote-audio"></div>
-          </section>
-        </div>
-
-        <section class="roster">
-          <div class="panel-title">Онлайн пользователи</div>
-          <div class="user-list" id="user-list"></div>
         </section>
 
-        <div class="chat" id="chat"></div>
+        <section class="panel-section hidden" id="panel-calls" role="tabpanel">
+          <div class="calls-grid">
+            <section class="call-panel">
+              <div class="panel-title">Звонки</div>
+              <label class="toggle">
+                <input id="dnd-toggle" type="checkbox" />
+                <span>Не беспокоить</span>
+              </label>
+              <div class="call-status" id="call-status">Звонков нет.</div>
+              <div class="call-controls">
+                <button id="call-mute" type="button" disabled>Выключить</button>
+                <button id="call-hangup" type="button" class="danger" disabled>Завершить</button>
+              </div>
+              <div class="meter">
+                <div class="meter-fill" id="call-mic-meter"></div>
+              </div>
+              <label class="toggle e2ee-toggle">
+                <input id="e2ee-toggle" type="checkbox" />
+                <span>E2EE (extra)</span>
+              </label>
+              <div class="call-security">
+                <div>Транспорт: Encrypted (DTLS-SRTP)</div>
+                <div id="e2ee-status">E2EE выключено</div>
+              </div>
+              <div class="call-banner hidden" id="outgoing-call">
+                <span id="outgoing-text">Звоним...</span>
+                <button id="call-cancel" type="button">Отменить</button>
+              </div>
+              <div class="call-banner hidden" id="incoming-call">
+                <span id="incoming-text">Incoming call</span>
+                <button id="call-accept" type="button">Принять</button>
+                <button id="call-reject" type="button">Отклонить</button>
+              </div>
+              <div class="sound-unlock hidden" id="sound-unlock">
+                <span>Нажмите, чтобы включить звуки</span>
+                <button id="sound-unlock-btn" type="button">Включить</button>
+              </div>
+              <div id="call-remote-audio"></div>
+            </section>
 
-        <form id="form" class="composer">
-          <textarea
-            id="message"
-            rows="3"
-            placeholder="Напишите сообщение..."
-          ></textarea>
-          <button type="submit">Отправить</button>
-        </form>
-        <div class="hint">Сообщение: Enter — отправить, Shift+Enter — новая строка</div>
+            <section class="roster">
+              <div class="panel-title">Онлайн пользователи</div>
+              <div class="user-list" id="user-list"></div>
+            </section>
+          </div>
+        </section>
       </section>
     </main>
 

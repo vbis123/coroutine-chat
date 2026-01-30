@@ -207,6 +207,10 @@ h1 {
   margin-bottom: 12px;
 }
 
+.panel-section {
+  margin-bottom: 8px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -356,13 +360,40 @@ button:hover {
   filter: brightness(0.95);
 }
 
+.menu-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 16px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #f6f0e8;
+  border: 1px solid var(--border);
+}
+
+.menu-tab {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.menu-tab.active {
+  background: #2f6fed;
+  color: #fff;
+  border-color: transparent;
+}
+
 .hint {
   margin-top: 10px;
   font-size: 12px;
   color: var(--muted);
 }
 
-.voice-call-grid {
+.calls-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
@@ -420,6 +451,16 @@ button:hover {
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
+}
+
+.voice-secret-hint {
+  font-size: 13px;
+  color: #8a5b2f;
+  background: #fff3cd;
+  border: 1px solid #f1d29a;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
 }
 
 .voice-warning {
@@ -539,10 +580,6 @@ button:hover {
   font-weight: 600;
 }
 
-.roster {
-  margin-bottom: 12px;
-}
-
 .user-list {
   display: grid;
   gap: 6px;
@@ -581,7 +618,7 @@ button:hover {
 }
 
 @media (max-width: 720px) {
-  .voice-call-grid {
+  .calls-grid {
     grid-template-columns: 1fr;
   }
 

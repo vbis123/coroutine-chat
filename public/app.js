@@ -30,12 +30,19 @@
   const logoutModal = document.getElementById("logout-modal");
   const logoutCancel = document.getElementById("logout-cancel");
   const logoutConfirm = document.getElementById("logout-confirm");
+  const menuChatBtn = document.getElementById("menu-chat");
+  const menuVoiceBtn = document.getElementById("menu-voice");
+  const menuCallsBtn = document.getElementById("menu-calls");
+  const panelChat = document.getElementById("panel-chat");
+  const panelVoice = document.getElementById("panel-voice");
+  const panelCalls = document.getElementById("panel-calls");
   const voiceJoinBtn = document.getElementById("voice-join");
   const voiceLeaveBtn = document.getElementById("voice-leave");
   const voiceMuteBtn = document.getElementById("voice-mute");
   const voicePttBtn = document.getElementById("voice-ptt");
   const voiceMicStatus = document.getElementById("voice-mic-status");
   const voiceWarning = document.getElementById("voice-warning");
+  const voiceSecretHint = document.getElementById("voice-secret-hint");
   const voiceParticipantsEl = document.getElementById("voice-participants");
   const voiceRemoteAudioEl = document.getElementById("voice-remote-audio");
   const dndToggle = document.getElementById("dnd-toggle");
@@ -63,6 +70,7 @@
   let openedAt = 0;
   let registeredName = "";
   let manualDisconnect = false;
+  let lastVoiceSecretNoticeAt = 0;
 
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -85,7 +93,6 @@
 
   const appConfig = await loadAppConfig();
   const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
-  const VOICE_ROOM = "global";
   const CALL_TIMEOUT_MS = 30000;
 
   const STATUS_TEXT = {
@@ -151,6 +158,9 @@
     return raw;
   };
   const getSecret = () => secretEl.value.trim();
+  const getVoiceRoom = () => getSecret();
+  const hasVoiceSecret = () => Boolean(getVoiceRoom());
+  const getActiveVoiceRoom = () => voice.room || getVoiceRoom();
 
   const connect = () => {
     if (!hasNickname()) return;
@@ -166,9 +176,10 @@
       setStatus("connected");
       sendNickname();
       sendWho();
-      sendSignal({ type: "voice:who", room: VOICE_ROOM });
+      sendVoiceWho();
       nicknameEl.disabled = true;
       connectBtn.textContent = "Отключиться";
+      updateVoiceUI();
     });
 
     ws.addEventListener("message", (event) => {
@@ -188,6 +199,7 @@
       registeredName = "";
       cleanupVoice("ws_closed");
       cleanupCall("disconnect");
+      updateVoiceUI();
       if (manualDisconnect) {
         manualDisconnect = false;
         return;
@@ -199,6 +211,7 @@
 
     ws.addEventListener("error", () => {
       setStatus("disconnected");
+      updateVoiceUI();
     });
   };
 
@@ -550,24 +563,43 @@
     ws.send(`${IAM_PREFIX}${registeredName}`);
   };
 
+  const isVoiceSignal = (message) => {
+    if (!message || !message.type) return false;
+    if (message.type.startsWith("voice:")) return true;
+    if (message.type.startsWith("webrtc:")) {
+      return !(message.payload && message.payload.callId);
+    }
+    return false;
+  };
+
   const sendSignal = (message) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (!message || !message.type) return;
     const id = getNickname();
     if (!id) return;
-    const payload = {
-      room: VOICE_ROOM,
-      from: id,
-      ...message,
-    };
+    const payload = { from: id, ...message };
+    if (isVoiceSignal(message)) {
+      const room = message.room || getActiveVoiceRoom();
+      if (room) payload.room = room;
+    }
     ws.send(JSON.stringify(payload));
   };
 
+  const sendVoiceWho = () => {
+    const room = getVoiceRoom();
+    if (!room) return;
+    sendSignal({ type: "voice:who", room });
+  };
+
   const updateVoiceUI = () => {
+    const hasSecret = hasVoiceSecret();
     voiceJoinBtn.classList.toggle("hidden", voice.joined);
     voiceLeaveBtn.classList.toggle("hidden", !voice.joined);
+    voiceJoinBtn.disabled = !hasSecret || !ws || ws.readyState !== WebSocket.OPEN;
+    voiceLeaveBtn.disabled = !voice.joined;
     voiceMuteBtn.disabled = !voice.joined;
     voicePttBtn.disabled = !voice.joined;
+    voiceSecretHint.classList.toggle("hidden", hasSecret);
     voiceMuteBtn.textContent = voice.muted ? "Включить" : "Выключить";
     voiceMicStatus.textContent = voice.joined
       ? `Микрофон: ${voice.muted ? "мут" : "живой"}`
@@ -737,6 +769,19 @@
   const joinVoice = async () => {
     setVoiceWarning(false);
     if (voice.joined) return;
+    const room = getVoiceRoom();
+    if (!room) {
+      updateVoiceUI();
+      const now = Date.now();
+      if (now - lastVoiceSecretNoticeAt > 4000) {
+        lastVoiceSecretNoticeAt = now;
+        renderMessage({
+          kind: "system",
+          body: "Для голосового чата заполните поле «Секрет» одинаковым кодовым словом.",
+        });
+      }
+      return;
+    }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       setVoiceWarning(true);
       return;
@@ -746,6 +791,7 @@
       return;
     }
     try {
+      voice.room = room;
       voice.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       voice.joined = true;
       voice.muted = false;
@@ -794,6 +840,7 @@
     voice.joined = false;
     voice.muted = false;
     voiceLocalSpeaking = false;
+    voice.room = null;
     stopSpeakingMonitor("local");
     for (const peerId of Array.from(voice.peers.keys())) {
       closeVoicePeer(peerId);
@@ -1587,6 +1634,7 @@
   });
 
   voiceJoinBtn.addEventListener("click", () => {
+    setMainTab("voice");
     joinVoice();
   });
 
@@ -1761,6 +1809,7 @@
     connectBtn.textContent = "Подключиться";
     logoutBtn.classList.remove("hidden");
     setStatus("disconnected");
+    setMainTab("chat");
     if (autoConnect) {
       setTimeout(() => connect(), 0);
     }
@@ -1911,18 +1960,53 @@
     });
   };
 
-  secretEl.addEventListener("input", () => {
+  const handleSecretChange = () => {
+    const previousRoom = voice.room;
     lockEncryptedMessages();
     if (getSecret()) {
       tryDecryptStoredMessages();
     }
-  });
+    updateVoiceUI();
+    if (voice.joined && previousRoom && previousRoom !== getVoiceRoom()) {
+      leaveVoice();
+    }
+    if (!voice.joined && previousRoom !== getVoiceRoom()) {
+      voice.roster.clear();
+      renderVoiceParticipants();
+      setVoiceWarning(false);
+    }
+    if (menuVoiceBtn.classList.contains("active")) {
+      sendVoiceWho();
+    }
+  };
+
+  secretEl.addEventListener("input", handleSecretChange);
   secretEl.addEventListener("focus", () => {
     if (secretEl.value) {
       secretEl.value = "";
       lockEncryptedMessages();
+      updateVoiceUI();
     }
   });
+
+  const setMainTab = (tab) => {
+    menuChatBtn.classList.toggle("active", tab === "chat");
+    menuVoiceBtn.classList.toggle("active", tab === "voice");
+    menuCallsBtn.classList.toggle("active", tab === "calls");
+    menuChatBtn.setAttribute("aria-selected", tab === "chat" ? "true" : "false");
+    menuVoiceBtn.setAttribute("aria-selected", tab === "voice" ? "true" : "false");
+    menuCallsBtn.setAttribute("aria-selected", tab === "calls" ? "true" : "false");
+    panelChat.classList.toggle("hidden", tab !== "chat");
+    panelVoice.classList.toggle("hidden", tab !== "voice");
+    panelCalls.classList.toggle("hidden", tab !== "calls");
+    if (tab === "voice") {
+      sendVoiceWho();
+    }
+  };
+
+  menuChatBtn.addEventListener("click", () => setMainTab("chat"));
+  menuVoiceBtn.addEventListener("click", () => setMainTab("voice"));
+  menuCallsBtn.addEventListener("click", () => setMainTab("calls"));
 
   const initTab = () => {
     const hash = window.location.hash.replace("#", "");
