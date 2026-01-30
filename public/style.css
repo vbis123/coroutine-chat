@@ -653,3 +653,9 @@ button:hover {
     font-size: 16px;
   }
 }
+
+@media (min-width: 701px) and (max-width: 1024px) and (pointer: coarse) {
+  .menu-tab {
+    font-size: 16px;
+  }
+}
