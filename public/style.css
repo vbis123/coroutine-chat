@@ -219,6 +219,10 @@ h1 {
   color: var(--muted);
 }
 
+#chat-panel .fields .field span {
+  font-weight: 600;
+}
+
 .field input {
   padding: 10px 12px;
   border-radius: 10px;
@@ -577,6 +581,10 @@ button:hover {
   background: #fff;
   color: var(--ink);
   cursor: pointer;
+  font-weight: 600;
+}
+
+.e2ee-toggle span {
   font-weight: 600;
 }
 
