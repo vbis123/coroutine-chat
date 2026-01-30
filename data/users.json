@@ -112,5 +112,11 @@
     "hash": "f0a2af1f851583a9cad4bc29b2c700f19ff02303164bd8af3e2823ae22e37462",
     "iterations": 100000,
     "createdAt": 1769451534886
+  },
+  "Piter22": {
+    "salt": "d19e2dd8907ed3ce5ca5bb36c0830113",
+    "hash": "2ceaf89ed5f81bea1593343b72c14dd6f830bc2a73c31929d509fed5d4cbd33d",
+    "iterations": 100000,
+    "createdAt": 1769641061187
   }
 }
