@@ -968,6 +968,27 @@
     e2eeStatus.textContent = text;
   };
 
+  const e2eeDebug = (text) => {
+    if (!DEBUG_E2EE) return;
+    if (callDebugEl) {
+      callDebugEl.classList.remove("hidden");
+      const line = document.createElement("div");
+      line.textContent = text;
+      callDebugEl.appendChild(line);
+      while (callDebugEl.childNodes.length > 6) {
+        callDebugEl.removeChild(callDebugEl.firstChild);
+      }
+    } else {
+      renderMessage({ kind: "system", body: text });
+    }
+    console.log(`[e2ee] ${text}`);
+  };
+
+  if (DEBUG_E2EE && callDebugEl) {
+    callDebugEl.classList.remove("hidden");
+    callDebugEl.textContent = "E2EE debug on";
+  }
+
   const updateCallUI = () => {
     const state = call.fsm.state;
     callMuteBtn.disabled = state !== "in_call";
@@ -2207,23 +2228,3 @@
   bootstrap();
   setStatus("disconnected");
 })();
-  const e2eeDebug = (text) => {
-    if (!DEBUG_E2EE) return;
-    if (callDebugEl) {
-      callDebugEl.classList.remove("hidden");
-      const line = document.createElement("div");
-      line.textContent = text;
-      callDebugEl.appendChild(line);
-      while (callDebugEl.childNodes.length > 6) {
-        callDebugEl.removeChild(callDebugEl.firstChild);
-      }
-    } else {
-      renderMessage({ kind: "system", body: text });
-    }
-    console.log(`[e2ee] ${text}`);
-  };
-
-  if (DEBUG_E2EE && callDebugEl) {
-    callDebugEl.classList.remove("hidden");
-    callDebugEl.textContent = "E2EE debug on";
-  }
