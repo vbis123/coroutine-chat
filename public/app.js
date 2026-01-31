@@ -135,6 +135,7 @@
     e2eeCallKey: null,
     e2eeTimeout: null,
     inviteTimeout: null,
+    e2eeRequestedByPeer: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1060,6 +1061,7 @@
     call.e2eeWrappingKey = null;
     call.e2eeCallKey = null;
     call.e2eeReady = false;
+    call.e2eeRequestedByPeer = false;
     if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
     call.e2eeTimeout = null;
     if (call.inviteTimeout) clearTimeout(call.inviteTimeout);
@@ -1167,14 +1169,17 @@
     }
     call.peerId = from;
     call.callId = callId;
-    const remoteE2ee = msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled;
-    call.e2eeEnabled = Boolean(remoteE2ee && E2EE.supports);
+    const remoteE2ee = Boolean(msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled);
+    call.e2eeRequestedByPeer = remoteE2ee;
+    call.e2eeEnabled = Boolean(E2EE.supports && (remoteE2ee || e2eeToggle.checked));
     e2eeToggle.checked = call.e2eeEnabled;
     updateE2eeStatus(
       call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
     );
     if (call.e2eeEnabled) {
-      renderMessage({ kind: "system", body: "E2EE включено по запросу звонящего." });
+      if (call.e2eeRequestedByPeer) {
+        renderMessage({ kind: "system", body: "E2EE включено по запросу звонящего." });
+      }
     }
     call.fsm.transition("incoming", { callId, peerId: from });
     updateCallUI();
@@ -1190,6 +1195,9 @@
     await AudioAlerts.ensureAudioUnlocked();
     AudioAlerts.stopAllTones();
     sendSignal({ type: "call:accept", to: call.peerId, payload: { callId: call.callId } });
+    if (call.e2eeEnabled && !call.e2eeRequestedByPeer) {
+      sendSignal({ type: "e2ee:enabled", to: call.peerId, payload: { callId: call.callId } });
+    }
     call.fsm.transition("accepted");
     updateCallUI();
     await prepareLocalCallStream();
@@ -1534,6 +1542,21 @@
 
     if (msg.type === "e2ee:key") {
       await handleE2eeKey(msg);
+      return;
+    }
+
+    if (msg.type === "e2ee:enabled") {
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      if (!E2EE.supports) {
+        updateE2eeStatus("E2EE не поддерживается");
+        return;
+      }
+      call.e2eeEnabled = true;
+      e2eeToggle.checked = true;
+      updateE2eeStatus("E2EE: подключение...");
+      if (call.fsm.state === "in_call" || call.connection) {
+        startE2EEHandshake();
+      }
       return;
     }
   };
