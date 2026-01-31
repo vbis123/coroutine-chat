@@ -94,6 +94,7 @@
   const appConfig = await loadAppConfig();
   const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
   const CALL_TIMEOUT_MS = 30000;
+  const DEBUG_E2EE = true;
 
   const STATUS_TEXT = {
     disconnected: "Отключено",
@@ -1323,6 +1324,7 @@
     call.e2eeGoAcked = false;
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
+    e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
       sendSignal({
         type: "e2ee:pubkey",
@@ -1340,6 +1342,7 @@
         return;
       }
       pubkeyAttempts += 1;
+      e2eeDebug(`E2EE: повтор pubkey (${pubkeyAttempts})`);
       sendPubkey();
     }, 1000);
     if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
@@ -1355,12 +1358,14 @@
   const handleE2eePubkey = async (msg) => {
     if (msg.payload.callId !== call.callId) return;
     if (!call.e2eeEnabled || !call.e2eeKeyPair) return;
+    e2eeDebug("E2EE: получили pubkey");
     const remoteKey = await KeyExchange.importPublicKey(msg.payload.publicKeyJwk);
     const wrappingKey = await KeyExchange.deriveWrappingKey(call.e2eeKeyPair.privateKey, remoteKey);
     call.e2eeWrappingKey = wrappingKey;
     if (call.fsm.context.initiator) {
       call.e2eeCallKey = KeyExchange.randomCallKey();
       const wrapped = await KeyExchange.wrapCallKey(wrappingKey, call.e2eeCallKey);
+      e2eeDebug("E2EE: отправляем key");
       sendSignal({
         type: "e2ee:key",
         to: call.peerId,
@@ -1373,6 +1378,7 @@
   const handleE2eeKey = async (msg) => {
     if (msg.payload.callId !== call.callId) return;
     if (!call.e2eeEnabled || !call.e2eeWrappingKey) return;
+    e2eeDebug("E2EE: получили key");
     call.e2eeCallKey = await KeyExchange.unwrapCallKey(
       call.e2eeWrappingKey,
       msg.payload.ivB64,
@@ -1380,6 +1386,7 @@
     );
     const sendReady = (ack = "") =>
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack } });
+    e2eeDebug("E2EE: отправляем ready");
     sendReady();
     if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
     let readyAttempts = 0;
@@ -1390,6 +1397,7 @@
         return;
       }
       readyAttempts += 1;
+      e2eeDebug(`E2EE: повтор ready (${readyAttempts})`);
       sendReady();
     }, 1000);
   };
@@ -1402,6 +1410,7 @@
       call.e2eeTimeout = null;
     }
     updateE2eeStatus("E2EE включено");
+    e2eeDebug("E2EE: трансформы включены");
     if (call.connection.pc) {
       call.connection.pc.getSenders().forEach((sender) => {
         if (sender.track && sender.track.kind === "audio") {
@@ -1595,6 +1604,7 @@
     if (msg.type === "e2ee:ready") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (msg.payload && msg.payload.ack === "go") {
+        e2eeDebug("E2EE: получили ack go");
         call.e2eeGoAcked = true;
         if (call.e2eeGoRetry) {
           clearInterval(call.e2eeGoRetry);
@@ -1607,26 +1617,30 @@
       const sendGo = () => {
         sendSignal({ type: "e2ee:go", to: call.peerId, payload: { callId: call.callId } });
       };
+      e2eeDebug("E2EE: отправляем go");
       sendGo();
       enableE2EETransforms();
       if (call.e2eeGoRetry) clearInterval(call.e2eeGoRetry);
       let goAttempts = 0;
       call.e2eeGoRetry = setInterval(() => {
-        if (call.e2eeGoAcked || goAttempts >= 5) {
-          clearInterval(call.e2eeGoRetry);
-          call.e2eeGoRetry = null;
-          return;
-        }
-        goAttempts += 1;
-        sendGo();
-      }, 1000);
+      if (call.e2eeGoAcked || goAttempts >= 5) {
+        clearInterval(call.e2eeGoRetry);
+        call.e2eeGoRetry = null;
+        return;
+      }
+      goAttempts += 1;
+      e2eeDebug(`E2EE: повтор go (${goAttempts})`);
+      sendGo();
+    }, 1000);
       return;
     }
 
     if (msg.type === "e2ee:go") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!call.e2eeEnabled) return;
+      e2eeDebug("E2EE: получили go");
       enableE2EETransforms();
+      e2eeDebug("E2EE: отправляем ack go");
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack: "go" } });
       if (call.e2eeReadyRetry) {
         clearInterval(call.e2eeReadyRetry);
@@ -1641,6 +1655,7 @@
         updateE2eeStatus("E2EE не поддерживается");
         return;
       }
+      e2eeDebug("E2EE: включено по сигналу");
       call.e2eeEnabled = true;
       e2eeToggle.checked = true;
       updateE2eeStatus("E2EE: подключение...");
@@ -1652,6 +1667,7 @@
 
     if (msg.type === "e2ee:disabled") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
+      e2eeDebug("E2EE: отключено по сигналу");
       call.e2eeEnabled = false;
       call.e2eePendingGo = false;
       updateE2eeStatus("E2EE выключено");
@@ -2172,3 +2188,7 @@
   bootstrap();
   setStatus("disconnected");
 })();
+  const e2eeDebug = (text) => {
+    if (!DEBUG_E2EE) return;
+    renderMessage({ kind: "system", body: text });
+  };
