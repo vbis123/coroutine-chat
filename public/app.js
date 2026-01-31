@@ -1168,10 +1168,14 @@
     call.peerId = from;
     call.callId = callId;
     const remoteE2ee = msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled;
-    call.e2eeEnabled = Boolean(remoteE2ee && e2eeToggle.checked && E2EE.supports);
+    call.e2eeEnabled = Boolean(remoteE2ee && E2EE.supports);
+    e2eeToggle.checked = call.e2eeEnabled;
     updateE2eeStatus(
       call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
     );
+    if (call.e2eeEnabled) {
+      renderMessage({ kind: "system", body: "E2EE включено по запросу звонящего." });
+    }
     call.fsm.transition("incoming", { callId, peerId: from });
     updateCallUI();
     incomingTextEl.textContent = `Входящий от ${from}`;
