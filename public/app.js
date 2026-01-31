@@ -47,6 +47,7 @@
   const voiceRemoteAudioEl = document.getElementById("voice-remote-audio");
   const dndToggle = document.getElementById("dnd-toggle");
   const callStatusEl = document.getElementById("call-status");
+  const callDebugEl = document.getElementById("call-debug");
   const callMuteBtn = document.getElementById("call-mute");
   const callHangupBtn = document.getElementById("call-hangup");
   const callCancelBtn = document.getElementById("call-cancel");
@@ -2190,5 +2191,16 @@
 })();
   const e2eeDebug = (text) => {
     if (!DEBUG_E2EE) return;
-    renderMessage({ kind: "system", body: text });
+    if (callDebugEl) {
+      callDebugEl.classList.remove("hidden");
+      const line = document.createElement("div");
+      line.textContent = text;
+      callDebugEl.appendChild(line);
+      while (callDebugEl.childNodes.length > 6) {
+        callDebugEl.removeChild(callDebugEl.firstChild);
+      }
+    } else {
+      renderMessage({ kind: "system", body: text });
+    }
+    console.log(`[e2ee] ${text}`);
   };
