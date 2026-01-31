@@ -137,6 +137,10 @@
     inviteTimeout: null,
     e2eeRequestedByPeer: false,
     e2eePendingGo: false,
+    e2eePubkeyRetry: null,
+    e2eeReadyRetry: null,
+    e2eeGoRetry: null,
+    e2eeGoAcked: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1064,6 +1068,13 @@
     call.e2eeReady = false;
     call.e2eeRequestedByPeer = false;
     call.e2eePendingGo = false;
+    call.e2eeGoAcked = false;
+    if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
+    call.e2eePubkeyRetry = null;
+    if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
+    call.e2eeReadyRetry = null;
+    if (call.e2eeGoRetry) clearInterval(call.e2eeGoRetry);
+    call.e2eeGoRetry = null;
     if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
     call.e2eeTimeout = null;
     if (call.inviteTimeout) clearTimeout(call.inviteTimeout);
@@ -1309,13 +1320,28 @@
   const startE2EEHandshake = async () => {
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
     call.e2eePendingGo = false;
+    call.e2eeGoAcked = false;
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
-    sendSignal({
-      type: "e2ee:pubkey",
-      to: call.peerId,
-      payload: { callId: call.callId, publicKeyJwk },
-    });
+    const sendPubkey = () => {
+      sendSignal({
+        type: "e2ee:pubkey",
+        to: call.peerId,
+        payload: { callId: call.callId, publicKeyJwk },
+      });
+    };
+    sendPubkey();
+    if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
+    let pubkeyAttempts = 0;
+    call.e2eePubkeyRetry = setInterval(() => {
+      if (call.e2eeWrappingKey || call.e2eeReady || pubkeyAttempts >= 5) {
+        clearInterval(call.e2eePubkeyRetry);
+        call.e2eePubkeyRetry = null;
+        return;
+      }
+      pubkeyAttempts += 1;
+      sendPubkey();
+    }, 1000);
     if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
     call.e2eeTimeout = setTimeout(() => {
       if (!call.e2eeReady) {
@@ -1323,7 +1349,7 @@
         updateE2eeStatus("E2EE таймаут, используем DTLS-SRTP");
         sendSignal({ type: "e2ee:disabled", to: call.peerId, payload: { callId: call.callId } });
       }
-    }, 5000);
+    }, 10000);
   };
 
   const handleE2eePubkey = async (msg) => {
@@ -1352,7 +1378,20 @@
       msg.payload.ivB64,
       msg.payload.encryptedKeyB64
     );
-    sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId } });
+    const sendReady = (ack = "") =>
+      sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack } });
+    sendReady();
+    if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
+    let readyAttempts = 0;
+    call.e2eeReadyRetry = setInterval(() => {
+      if (call.e2eeReady || readyAttempts >= 5) {
+        clearInterval(call.e2eeReadyRetry);
+        call.e2eeReadyRetry = null;
+        return;
+      }
+      readyAttempts += 1;
+      sendReady();
+    }, 1000);
   };
 
   const enableE2EETransforms = () => {
@@ -1555,10 +1594,32 @@
 
     if (msg.type === "e2ee:ready") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
+      if (msg.payload && msg.payload.ack === "go") {
+        call.e2eeGoAcked = true;
+        if (call.e2eeGoRetry) {
+          clearInterval(call.e2eeGoRetry);
+          call.e2eeGoRetry = null;
+        }
+        return;
+      }
       if (!call.e2eeEnabled || !call.fsm.context.initiator || !call.e2eePendingGo) return;
       call.e2eePendingGo = false;
-      sendSignal({ type: "e2ee:go", to: call.peerId, payload: { callId: call.callId } });
+      const sendGo = () => {
+        sendSignal({ type: "e2ee:go", to: call.peerId, payload: { callId: call.callId } });
+      };
+      sendGo();
       enableE2EETransforms();
+      if (call.e2eeGoRetry) clearInterval(call.e2eeGoRetry);
+      let goAttempts = 0;
+      call.e2eeGoRetry = setInterval(() => {
+        if (call.e2eeGoAcked || goAttempts >= 5) {
+          clearInterval(call.e2eeGoRetry);
+          call.e2eeGoRetry = null;
+          return;
+        }
+        goAttempts += 1;
+        sendGo();
+      }, 1000);
       return;
     }
 
@@ -1566,6 +1627,11 @@
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!call.e2eeEnabled) return;
       enableE2EETransforms();
+      sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack: "go" } });
+      if (call.e2eeReadyRetry) {
+        clearInterval(call.e2eeReadyRetry);
+        call.e2eeReadyRetry = null;
+      }
       return;
     }
 
