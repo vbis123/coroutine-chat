@@ -1140,6 +1140,9 @@
     call.peerId = peerId;
     call.callId = createCallId();
     call.e2eeEnabled = e2eeToggle.checked && E2EE.supports;
+    e2eeDebug(
+      `E2EE: исходящий, supports=${E2EE.supports ? "yes" : "no"}, toggle=${e2eeToggle.checked ? "on" : "off"}`
+    );
     updateE2eeStatus(
       call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
     );
@@ -1187,6 +1190,11 @@
     const remoteE2ee = Boolean(msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled);
     call.e2eeRequestedByPeer = remoteE2ee;
     call.e2eeEnabled = Boolean(E2EE.supports && (remoteE2ee || e2eeToggle.checked));
+    e2eeDebug(
+      `E2EE: входящий, supports=${E2EE.supports ? "yes" : "no"}, remote=${remoteE2ee ? "on" : "off"}, toggle=${
+        e2eeToggle.checked ? "on" : "off"
+      }`
+    );
     e2eeToggle.checked = call.e2eeEnabled;
     updateE2eeStatus(
       call.e2eeEnabled ? "E2EE: подключение..." : E2EE.supports ? "E2EE выключено" : "E2EE не поддерживается"
@@ -1210,6 +1218,9 @@
     await AudioAlerts.ensureAudioUnlocked();
     AudioAlerts.stopAllTones();
     sendSignal({ type: "call:accept", to: call.peerId, payload: { callId: call.callId } });
+    e2eeDebug(
+      `E2EE: accept, enabled=${call.e2eeEnabled ? "yes" : "no"}, supports=${E2EE.supports ? "yes" : "no"}`
+    );
     if (call.e2eeEnabled && !call.e2eeRequestedByPeer) {
       sendSignal({ type: "e2ee:enabled", to: call.peerId, payload: { callId: call.callId } });
     }
@@ -1323,6 +1334,7 @@
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
+    e2eeDebug("E2EE: старт рукопожатия");
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
@@ -1542,6 +1554,11 @@
       call.inviteTimeout = null;
       call.fsm.transition("accepted");
       updateCallUI();
+      e2eeDebug(
+        `E2EE: outgoing accept, enabled=${call.e2eeEnabled ? "yes" : "no"}, supports=${
+          E2EE.supports ? "yes" : "no"
+        }`
+      );
       await prepareLocalCallStream();
       createCallConnection(call.peerId);
       startCallMeter();
@@ -1866,6 +1883,7 @@
       updateE2eeStatus("E2EE не поддерживается");
       return;
     }
+    e2eeDebug(`E2EE: toggle ${e2eeToggle.checked ? "on" : "off"}`);
     updateE2eeStatus(e2eeToggle.checked ? "E2EE готово" : "E2EE выключено");
   });
 
@@ -2204,3 +2222,8 @@
     }
     console.log(`[e2ee] ${text}`);
   };
+
+  if (DEBUG_E2EE && callDebugEl) {
+    callDebugEl.classList.remove("hidden");
+    callDebugEl.textContent = "E2EE debug on";
+  }
