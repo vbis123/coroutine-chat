@@ -1088,12 +1088,12 @@
         setupCallAudio();
       },
       onSender: (sender) => {
-        if (call.e2eeEnabled && call.e2eeCallKey && E2EE.supports) {
+        if (call.e2eeReady && call.e2eeCallKey && E2EE.supports) {
           E2EE.attachSenderTransform(sender, call.e2eeCallKey);
         }
       },
       onReceiver: (receiver) => {
-        if (call.e2eeEnabled && call.e2eeCallKey && E2EE.supports) {
+        if (call.e2eeReady && call.e2eeCallKey && E2EE.supports) {
           E2EE.attachReceiverTransform(receiver, call.e2eeCallKey);
         }
       },
@@ -1358,6 +1358,10 @@
   const enableE2EETransforms = () => {
     if (!call.connection || !call.e2eeCallKey || call.e2eeReady) return;
     call.e2eeReady = true;
+    if (call.e2eeTimeout) {
+      clearTimeout(call.e2eeTimeout);
+      call.e2eeTimeout = null;
+    }
     updateE2eeStatus("E2EE включено");
     if (call.connection.pc) {
       call.connection.pc.getSenders().forEach((sender) => {
