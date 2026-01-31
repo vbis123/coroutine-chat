@@ -254,6 +254,8 @@ const SIGNAL_TYPES = new Set([
   "call:hangup",
   "e2ee:pubkey",
   "e2ee:key",
+  "e2ee:ready",
+  "e2ee:go",
   "e2ee:enabled",
   "e2ee:disabled",
 ]);

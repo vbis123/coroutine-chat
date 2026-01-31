@@ -136,6 +136,7 @@
     e2eeTimeout: null,
     inviteTimeout: null,
     e2eeRequestedByPeer: false,
+    e2eePendingGo: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1062,6 +1063,7 @@
     call.e2eeCallKey = null;
     call.e2eeReady = false;
     call.e2eeRequestedByPeer = false;
+    call.e2eePendingGo = false;
     if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
     call.e2eeTimeout = null;
     if (call.inviteTimeout) clearTimeout(call.inviteTimeout);
@@ -1306,6 +1308,7 @@
 
   const startE2EEHandshake = async () => {
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
+    call.e2eePendingGo = false;
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     sendSignal({
@@ -1318,6 +1321,7 @@
       if (!call.e2eeReady) {
         call.e2eeEnabled = false;
         updateE2eeStatus("E2EE таймаут, используем DTLS-SRTP");
+        sendSignal({ type: "e2ee:disabled", to: call.peerId, payload: { callId: call.callId } });
       }
     }, 5000);
   };
@@ -1336,7 +1340,7 @@
         to: call.peerId,
         payload: { callId: call.callId, ivB64: wrapped.ivB64, encryptedKeyB64: wrapped.encryptedKeyB64 },
       });
-      enableE2EETransforms();
+      call.e2eePendingGo = true;
     }
   };
 
@@ -1348,7 +1352,7 @@
       msg.payload.ivB64,
       msg.payload.encryptedKeyB64
     );
-    enableE2EETransforms();
+    sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId } });
   };
 
   const enableE2EETransforms = () => {
@@ -1545,6 +1549,22 @@
       return;
     }
 
+    if (msg.type === "e2ee:ready") {
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      if (!call.e2eeEnabled || !call.fsm.context.initiator || !call.e2eePendingGo) return;
+      call.e2eePendingGo = false;
+      sendSignal({ type: "e2ee:go", to: call.peerId, payload: { callId: call.callId } });
+      enableE2EETransforms();
+      return;
+    }
+
+    if (msg.type === "e2ee:go") {
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      if (!call.e2eeEnabled) return;
+      enableE2EETransforms();
+      return;
+    }
+
     if (msg.type === "e2ee:enabled") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!E2EE.supports) {
@@ -1557,6 +1577,14 @@
       if (call.fsm.state === "in_call" || call.connection) {
         startE2EEHandshake();
       }
+      return;
+    }
+
+    if (msg.type === "e2ee:disabled") {
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      call.e2eeEnabled = false;
+      call.e2eePendingGo = false;
+      updateE2eeStatus("E2EE выключено");
       return;
     }
   };
