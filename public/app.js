@@ -1160,6 +1160,7 @@
       call.connection.addLocalStream(call.localStream);
     }
     console.log("[call] peer created:", peerId);
+    tryEnableE2EE();
   };
 
   const prepareLocalCallStream = async () => {
@@ -1477,6 +1478,7 @@
       msg.payload.encryptedKeyB64
     );
     call.e2eeKeyRequested = false;
+    tryEnableE2EE();
     const sendReady = (ack = "") =>
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack } });
     e2eeDebug("E2EE: отправляем ready");
@@ -1516,6 +1518,13 @@
         }
       });
     }
+  };
+
+  const tryEnableE2EE = () => {
+    if (!call.e2eeEnabled) return;
+    if (!call.e2eeCallKey) return;
+    if (!call.connection) return;
+    enableE2EETransforms();
   };
 
   const handleSignal = async (msg) => {
@@ -1741,7 +1750,7 @@
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!call.e2eeEnabled) return;
       e2eeDebug("E2EE: получили go");
-      enableE2EETransforms();
+      tryEnableE2EE();
       e2eeDebug("E2EE: отправляем ack go");
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack: "go" } });
       if (call.e2eeReadyRetry) {
