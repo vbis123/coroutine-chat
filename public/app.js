@@ -144,6 +144,8 @@
     e2eeGoRetry: null,
     e2eeGoAcked: false,
     e2eeHandshakeStarting: false,
+    e2eeKeyRequested: false,
+    e2eeSentPubkey: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1106,6 +1108,8 @@
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
     call.e2eeHandshakeStarting = false;
+    call.e2eeKeyRequested = false;
+    call.e2eeSentPubkey = false;
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
     call.e2eePubkeyRetry = null;
     if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
@@ -1379,6 +1383,8 @@
     e2eeDebug("E2EE: старт рукопожатия");
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
     call.e2eeHandshakeStarting = false;
+    call.e2eeKeyRequested = false;
+    call.e2eeSentPubkey = false;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
@@ -1387,6 +1393,7 @@
         to: call.peerId,
         payload: { callId: call.callId, publicKeyJwk },
       });
+      call.e2eeSentPubkey = true;
     };
     sendPubkey();
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
@@ -1423,11 +1430,25 @@
     if (!call.e2eeKeyPair) {
       e2eeDebug("E2EE: создаем ключи по pubkey");
       call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+      call.e2eeSentPubkey = false;
     }
     e2eeDebug("E2EE: получили pubkey");
+    if (!call.fsm.context.initiator && !call.e2eeSentPubkey) {
+      const selfPub = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
+      sendSignal({
+        type: "e2ee:pubkey",
+        to: call.peerId,
+        payload: { callId: call.callId, publicKeyJwk: selfPub },
+      });
+      call.e2eeSentPubkey = true;
+      e2eeDebug("E2EE: ответили pubkey");
+    }
     const remoteKey = await KeyExchange.importPublicKey(msg.payload.publicKeyJwk);
     const wrappingKey = await KeyExchange.deriveWrappingKey(call.e2eeKeyPair.privateKey, remoteKey);
     call.e2eeWrappingKey = wrappingKey;
+    if (!call.fsm.context.initiator) {
+      call.e2eeCallKey = null;
+    }
     if (call.fsm.context.initiator) {
       call.e2eeCallKey = KeyExchange.randomCallKey();
       const wrapped = await KeyExchange.wrapCallKey(wrappingKey, call.e2eeCallKey);
@@ -1438,6 +1459,11 @@
         payload: { callId: call.callId, ivB64: wrapped.ivB64, encryptedKeyB64: wrapped.encryptedKeyB64 },
       });
       call.e2eePendingGo = true;
+    } else {
+      if (!call.e2eeKeyRequested) {
+        call.e2eeKeyRequested = true;
+        e2eeDebug("E2EE: ждем key от инициатора");
+      }
     }
   };
 
@@ -1450,6 +1476,7 @@
       msg.payload.ivB64,
       msg.payload.encryptedKeyB64
     );
+    call.e2eeKeyRequested = false;
     const sendReady = (ack = "") =>
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack } });
     e2eeDebug("E2EE: отправляем ready");
