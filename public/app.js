@@ -143,6 +143,7 @@
     e2eeReadyRetry: null,
     e2eeGoRetry: null,
     e2eeGoAcked: false,
+    e2eeHandshakeStarting: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1104,6 +1105,7 @@
     call.e2eeRequestedByPeer = false;
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
+    call.e2eeHandshakeStarting = false;
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
     call.e2eePubkeyRetry = null;
     if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
@@ -1367,14 +1369,16 @@
 
   const startE2EEHandshake = async () => {
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
-    if (call.e2eeKeyPair) {
+    if (call.e2eeHandshakeStarting || call.e2eeKeyPair) {
       e2eeDebug("E2EE: рукопожатие уже запущено");
       return;
     }
+    call.e2eeHandshakeStarting = true;
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
     e2eeDebug("E2EE: старт рукопожатия");
     call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+    call.e2eeHandshakeStarting = false;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
@@ -1489,6 +1493,10 @@
 
   const handleSignal = async (msg) => {
     if (!msg || !msg.type) return;
+    if (msg.type.startsWith("e2ee:")) {
+      const msgCallId = msg.payload && msg.payload.callId ? msg.payload.callId : "none";
+      e2eeDebug(`E2EE: recv ${msg.type} (callId=${msgCallId})`);
+    }
     if (msg.type === "voice:state") {
       if (msg.payload && Array.isArray(msg.payload.participants)) {
         voice.roster = new Map(
