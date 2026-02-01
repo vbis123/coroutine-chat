@@ -147,6 +147,7 @@
     e2eeKeyRequested: false,
     e2eeSentPubkey: false,
     e2eeGoReceived: false,
+    e2eePendingKey: null,
   };
 
   const inviteCooldowns = new Map();
@@ -1119,6 +1120,7 @@
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
     call.e2eeGoReceived = false;
+    call.e2eePendingKey = null;
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
     call.e2eePubkeyRetry = null;
     if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
@@ -1396,6 +1398,7 @@
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
     call.e2eeGoReceived = false;
+    call.e2eePendingKey = null;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
@@ -1444,7 +1447,7 @@
       call.e2eeSentPubkey = false;
     }
     e2eeDebug("E2EE: получили pubkey");
-    if (!call.fsm.context.initiator && !call.e2eeSentPubkey) {
+    if (!call.e2eeSentPubkey) {
       const selfPub = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
       sendSignal({
         type: "e2ee:pubkey",
@@ -1459,6 +1462,11 @@
     call.e2eeWrappingKey = wrappingKey;
     if (!call.fsm.context.initiator) {
       call.e2eeCallKey = null;
+    }
+    if (call.e2eePendingKey) {
+      const pending = call.e2eePendingKey;
+      call.e2eePendingKey = null;
+      await handleE2eeKey(pending);
     }
     if (call.fsm.context.initiator) {
       if (!call.e2eeCallKey) {
@@ -1483,7 +1491,12 @@
 
   const handleE2eeKey = async (msg) => {
     if (msg.payload.callId !== call.callId) return;
-    if (!call.e2eeEnabled || !call.e2eeWrappingKey) return;
+    if (!call.e2eeEnabled) return;
+    if (!call.e2eeWrappingKey) {
+      call.e2eePendingKey = msg;
+      e2eeDebug("E2EE: key отложен (ждем wrappingKey)");
+      return;
+    }
     e2eeDebug("E2EE: получили key");
     call.e2eeCallKey = await KeyExchange.unwrapCallKey(
       call.e2eeWrappingKey,
