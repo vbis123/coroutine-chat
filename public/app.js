@@ -968,14 +968,26 @@
     e2eeStatus.textContent = text;
   };
 
+  const resetCallDebug = (title) => {
+    if (!DEBUG_E2EE || !callDebugEl) return;
+    callDebugEl.classList.remove("hidden");
+    callDebugEl.innerHTML = "";
+    if (title) {
+      const header = document.createElement("div");
+      header.textContent = title;
+      callDebugEl.appendChild(header);
+    }
+  };
+
   const e2eeDebug = (text) => {
     if (!DEBUG_E2EE) return;
     if (callDebugEl) {
       callDebugEl.classList.remove("hidden");
       const line = document.createElement("div");
-      line.textContent = text;
+      const ts = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      line.textContent = `[${ts}] ${text}`;
       callDebugEl.appendChild(line);
-      while (callDebugEl.childNodes.length > 6) {
+      while (callDebugEl.childNodes.length > 80) {
         callDebugEl.removeChild(callDebugEl.firstChild);
       }
     } else {
@@ -1160,6 +1172,7 @@
     await AudioAlerts.ensureAudioUnlocked();
     call.peerId = peerId;
     call.callId = createCallId();
+    resetCallDebug(`E2EE debug on (call ${call.callId.slice(0, 6)})`);
     call.e2eeEnabled = e2eeToggle.checked && E2EE.supports;
     e2eeDebug(
       `E2EE: исходящий, supports=${E2EE.supports ? "yes" : "no"}, toggle=${e2eeToggle.checked ? "on" : "off"}`
@@ -1208,6 +1221,7 @@
     }
     call.peerId = from;
     call.callId = callId;
+    resetCallDebug(`E2EE debug on (call ${call.callId.slice(0, 6)})`);
     const remoteE2ee = Boolean(msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled);
     call.e2eeRequestedByPeer = remoteE2ee;
     call.e2eeEnabled = Boolean(E2EE.supports && (remoteE2ee || e2eeToggle.checked));
