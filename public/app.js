@@ -146,6 +146,7 @@
     e2eeHandshakeStarting: false,
     e2eeKeyRequested: false,
     e2eeSentPubkey: false,
+    e2eeGoReceived: false,
   };
 
   const inviteCooldowns = new Map();
@@ -1117,6 +1118,7 @@
     call.e2eeHandshakeStarting = false;
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
+    call.e2eeGoReceived = false;
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
     call.e2eePubkeyRetry = null;
     if (call.e2eeReadyRetry) clearInterval(call.e2eeReadyRetry);
@@ -1393,6 +1395,7 @@
     call.e2eeHandshakeStarting = false;
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
+    call.e2eeGoReceived = false;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
@@ -1537,6 +1540,7 @@
     if (!call.e2eeEnabled) return;
     if (!call.e2eeCallKey) return;
     if (!call.connection) return;
+    if (!call.fsm.context.initiator && !call.e2eeGoReceived) return;
     enableE2EETransforms();
   };
 
@@ -1763,6 +1767,7 @@
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!call.e2eeEnabled) return;
       e2eeDebug("E2EE: получили go");
+      call.e2eeGoReceived = true;
       tryEnableE2EE();
       e2eeDebug("E2EE: отправляем ack go");
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack: "go" } });
