@@ -1367,6 +1367,10 @@
 
   const startE2EEHandshake = async () => {
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
+    if (call.e2eeKeyPair) {
+      e2eeDebug("E2EE: рукопожатие уже запущено");
+      return;
+    }
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
     e2eeDebug("E2EE: старт рукопожатия");
@@ -1405,7 +1409,17 @@
 
   const handleE2eePubkey = async (msg) => {
     if (msg.payload.callId !== call.callId) return;
-    if (!call.e2eeEnabled || !call.e2eeKeyPair) return;
+    if (!E2EE.supports) return;
+    if (!call.e2eeEnabled) {
+      call.e2eeEnabled = true;
+      e2eeToggle.checked = true;
+      updateE2eeStatus("E2EE: подключение...");
+      e2eeDebug("E2EE: авто-включение по pubkey");
+    }
+    if (!call.e2eeKeyPair) {
+      e2eeDebug("E2EE: создаем ключи по pubkey");
+      call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+    }
     e2eeDebug("E2EE: получили pubkey");
     const remoteKey = await KeyExchange.importPublicKey(msg.payload.publicKeyJwk);
     const wrappingKey = await KeyExchange.deriveWrappingKey(call.e2eeKeyPair.privateKey, remoteKey);
@@ -1706,6 +1720,10 @@
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!E2EE.supports) {
         updateE2eeStatus("E2EE не поддерживается");
+        return;
+      }
+      if (call.e2eeEnabled) {
+        e2eeDebug("E2EE: сигнал enabled игнорирован (уже включено)");
         return;
       }
       e2eeDebug("E2EE: включено по сигналу");
