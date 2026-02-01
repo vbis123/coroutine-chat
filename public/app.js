@@ -147,6 +147,7 @@
     e2eeKeyRequested: false,
     e2eeSentPubkey: false,
     e2eeGoReceived: false,
+    e2eeGoAckReceived: false,
     e2eePendingKey: null,
   };
 
@@ -1120,6 +1121,7 @@
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
     call.e2eeGoReceived = false;
+    call.e2eeGoAckReceived = false;
     call.e2eePendingKey = null;
     if (call.e2eePubkeyRetry) clearInterval(call.e2eePubkeyRetry);
     call.e2eePubkeyRetry = null;
@@ -1398,6 +1400,7 @@
     call.e2eeKeyRequested = false;
     call.e2eeSentPubkey = false;
     call.e2eeGoReceived = false;
+    call.e2eeGoAckReceived = false;
     call.e2eePendingKey = null;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
     e2eeDebug("E2EE: отправляем pubkey");
@@ -1553,7 +1556,11 @@
     if (!call.e2eeEnabled) return;
     if (!call.e2eeCallKey) return;
     if (!call.connection) return;
-    if (!call.fsm.context.initiator && !call.e2eeGoReceived) return;
+    if (call.fsm.context.initiator) {
+      if (!call.e2eeGoAcked) return;
+    } else {
+      if (!call.e2eeGoAckReceived) return;
+    }
     enableE2EETransforms();
   };
 
@@ -1751,6 +1758,8 @@
           clearInterval(call.e2eeGoRetry);
           call.e2eeGoRetry = null;
         }
+        tryEnableE2EE();
+        sendSignal({ type: "e2ee:go_ack", to: call.peerId, payload: { callId: call.callId } });
         return;
       }
       if (!call.e2eeEnabled || !call.fsm.context.initiator || !call.e2eePendingGo) return;
@@ -1781,13 +1790,21 @@
       if (!call.e2eeEnabled) return;
       e2eeDebug("E2EE: получили go");
       call.e2eeGoReceived = true;
-      tryEnableE2EE();
       e2eeDebug("E2EE: отправляем ack go");
       sendSignal({ type: "e2ee:ready", to: call.peerId, payload: { callId: call.callId, ack: "go" } });
       if (call.e2eeReadyRetry) {
         clearInterval(call.e2eeReadyRetry);
         call.e2eeReadyRetry = null;
       }
+      return;
+    }
+
+    if (msg.type === "e2ee:go_ack") {
+      if (msg.payload && msg.payload.callId !== call.callId) return;
+      if (!call.e2eeEnabled) return;
+      e2eeDebug("E2EE: получили go_ack");
+      call.e2eeGoAckReceived = true;
+      tryEnableE2EE();
       return;
     }
 

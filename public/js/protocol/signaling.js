@@ -17,6 +17,7 @@
     "e2ee:key",
     "e2ee:ready",
     "e2ee:go",
+    "e2ee:go_ack",
     "e2ee:enabled",
     "e2ee:disabled",
   ]);
