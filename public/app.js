@@ -95,7 +95,7 @@
   const appConfig = await loadAppConfig();
   const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
   const CALL_TIMEOUT_MS = 30000;
-  const DEBUG_E2EE = true;
+  const DEBUG_E2EE = false;
 
   const STATUS_TEXT = {
     disconnected: "Отключено",
