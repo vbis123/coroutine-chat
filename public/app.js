@@ -971,6 +971,13 @@
     e2eeStatus.textContent = text;
   };
 
+  const e2eeKeyTag = (keyBytes) => {
+    if (!keyBytes || !keyBytes.length) return "none";
+    return Array.from(keyBytes.slice(0, 4))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  };
+
   const resetCallDebug = (title) => {
     if (!DEBUG_E2EE || !callDebugEl) return;
     callDebugEl.classList.remove("hidden");
@@ -1451,7 +1458,10 @@
       call.e2eeCallKey = null;
     }
     if (call.fsm.context.initiator) {
-      call.e2eeCallKey = KeyExchange.randomCallKey();
+      if (!call.e2eeCallKey) {
+        call.e2eeCallKey = KeyExchange.randomCallKey();
+      }
+      e2eeDebug(`E2EE: ключ инициатора ${e2eeKeyTag(call.e2eeCallKey)}`);
       const wrapped = await KeyExchange.wrapCallKey(wrappingKey, call.e2eeCallKey);
       e2eeDebug("E2EE: отправляем key");
       sendSignal({
@@ -1477,6 +1487,7 @@
       msg.payload.ivB64,
       msg.payload.encryptedKeyB64
     );
+    e2eeDebug(`E2EE: ключ получателя ${e2eeKeyTag(call.e2eeCallKey)}`);
     call.e2eeKeyRequested = false;
     tryEnableE2EE();
     const sendReady = (ack = "") =>
@@ -1505,7 +1516,9 @@
       call.e2eeTimeout = null;
     }
     updateE2eeStatus("E2EE включено");
-    e2eeDebug("E2EE: трансформы включены");
+    const senders = call.connection && call.connection.pc ? call.connection.pc.getSenders().length : 0;
+    const receivers = call.connection && call.connection.pc ? call.connection.pc.getReceivers().length : 0;
+    e2eeDebug(`E2EE: трансформы включены (key=${e2eeKeyTag(call.e2eeCallKey)}, s=${senders}, r=${receivers})`);
     if (call.connection.pc) {
       call.connection.pc.getSenders().forEach((sender) => {
         if (sender.track && sender.track.kind === "audio") {
