@@ -1769,7 +1769,7 @@
       };
       e2eeDebug("E2EE: отправляем go");
       sendGo();
-      enableE2EETransforms();
+      tryEnableE2EE();
       if (call.e2eeGoRetry) clearInterval(call.e2eeGoRetry);
       let goAttempts = 0;
       call.e2eeGoRetry = setInterval(() => {
