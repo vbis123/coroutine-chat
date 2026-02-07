@@ -423,13 +423,13 @@ wss.on("connection", (ws, req) => {
 
   tcp.on("error", (err) => {
     console.log(`[tcp] error: ${err.message}`);
-    closeBoth("tcp error");
+    closeBoth("tcp error", 1011);
   });
 
   tcp.on("close", () => {
     tcpClosed = true;
     console.log("[tcp] disconnected");
-    closeBoth("tcp closed");
+    closeBoth("tcp closed", 1011);
   });
 
   ws.on("message", (data) => {
@@ -607,7 +607,7 @@ wss.on("connection", (ws, req) => {
       wsQueueBytes += frame.length;
       wsQueue.push({ buffer: frame });
       if (wsQueueBytes > MAX_WS_QUEUE) {
-        closeBoth("ws->tcp queue overflow");
+        closeBoth("ws->tcp queue overflow", 1013);
       }
     }
   });
@@ -619,7 +619,7 @@ wss.on("connection", (ws, req) => {
 
   ws.on("error", (err) => {
     console.log(`[ws] error: ${err.message}`);
-    closeBoth("ws error");
+    closeBoth("ws error", 1011);
   });
 
   ws.on("pong", resumeIfPossible);
