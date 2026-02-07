@@ -81,6 +81,8 @@
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const knownNicknames = new Set();
+  const seenFileIds = new Set();
+  const seenFileOrder = [];
   const backoffDelays = [500, 1000, 2000, 5000, 10000];
   const WHO_MSG = "::who::";
   const IAM_PREFIX = "::iam::";
@@ -90,6 +92,7 @@
   const BLOCKED_KEY = "callBlocked";
   const FILE_PREFIX = "::file::";
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const FILE_DEDUP_LIMIT = 200;
   const loadAppConfig = async () => {
     if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
     try {
@@ -547,6 +550,18 @@
     }
   };
 
+  const rememberFileId = (id) => {
+    if (!id) return false;
+    if (seenFileIds.has(id)) return false;
+    seenFileIds.add(id);
+    seenFileOrder.push(id);
+    if (seenFileOrder.length > FILE_DEDUP_LIMIT) {
+      const oldest = seenFileOrder.shift();
+      if (oldest) seenFileIds.delete(oldest);
+    }
+    return true;
+  };
+
   const buildFileView = (filePayload) => {
     if (!filePayload || !filePayload.data) return null;
     try {
@@ -612,6 +627,9 @@
 
     const filePayload = parseFilePayload(body);
     if (filePayload) {
+      if (!rememberFileId(filePayload.id)) {
+        return;
+      }
       file = buildFileView(filePayload);
       body = filePayload.text || "";
     }
@@ -1967,6 +1985,7 @@
     if (pendingFile) {
       const filePayload = {
         kind: "file",
+        id: (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name: pendingFile.name,
         type: pendingFile.type,
         size: pendingFile.size,
