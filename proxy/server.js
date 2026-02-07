@@ -14,7 +14,7 @@ const KEY_PATH = process.env.KEY_PATH;
 const TCP_HOST = process.env.TCP_HOST || "127.0.0.1";
 const TCP_PORT = Number(process.env.TCP_PORT || 9000);
 
-const MAX_PAYLOAD = 8 * 1024 * 1024; // 8MB
+const MAX_PAYLOAD = 12 * 1024 * 1024; // 12MB
 const MAX_WS_QUEUE = 2 * 1024 * 1024; // 2MB
 const WS_BACKPRESSURE_HIGH = 2 * 1024 * 1024;
 const WS_BACKPRESSURE_LOW = 512 * 1024;

@@ -16,7 +16,7 @@ using boost::asio::ip::tcp;
 using boost::asio::use_awaitable;
 
 namespace {
-constexpr std::size_t kMaxMessageSize = 8 * 1024 * 1024; // 8 MB
+constexpr std::size_t kMaxMessageSize = 12 * 1024 * 1024; // 12 MB
 
 std::string make_frame(const std::string &payload) {
   uint32_t len = static_cast<uint32_t>(payload.size());

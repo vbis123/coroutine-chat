@@ -377,16 +377,21 @@
     return { kind: "system", body: text };
   };
 
+  const parseMessageEnvelope = (raw) => {
+    if (!raw || raw[0] !== "{") return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "body" in parsed && "id" in parsed) {
+        return { id: String(parsed.id || ""), body: String(parsed.body || "") };
+      }
+    } catch (_) {}
+    return null;
+  };
+
   const parseChatPayload = (from, raw, direct) => {
     if (!raw) return { kind: "chat", from, body: "", direct, id: null };
-    if (raw[0] === "{") {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && "body" in parsed && "id" in parsed) {
-          return { kind: "chat", from, body: String(parsed.body || ""), direct, id: String(parsed.id || "") };
-        }
-      } catch (_) {}
-    }
+    const env = parseMessageEnvelope(raw);
+    if (env) return { kind: "chat", from, body: env.body, direct, id: env.id };
     return { kind: "chat", from, body: raw, direct, id: null };
   };
 
@@ -624,6 +629,7 @@
     }
 
     let body = parsed.body;
+    let messageId = parsed.id || null;
     const ackId = parseAck(body);
     if (ackId) {
       const node = document.querySelector(`.msg[data-msg-id="${ackId}"] .tag`);
@@ -654,6 +660,14 @@
       }
     }
 
+    if (decrypted && !messageId) {
+      const env = parseMessageEnvelope(body);
+      if (env) {
+        messageId = env.id;
+        body = env.body;
+      }
+    }
+
     const filePayload = parseFilePayload(body);
     if (filePayload) {
       if (!rememberFileId(filePayload.id)) {
@@ -675,8 +689,8 @@
       encryptedPayload,
     });
 
-    if (!encryptedPayload && parsed.id) {
-      const ackPayload = `${ACK_PREFIX}${parsed.id}`;
+    if (!encryptedPayload && messageId) {
+      const ackPayload = `${ACK_PREFIX}${messageId}`;
       if (parsed.direct) {
         ws.send(`@${parsed.from} ${ackPayload}`);
       } else {
@@ -2069,9 +2083,6 @@
         };
         if (!ws || ws.readyState !== WebSocket.OPEN) {
           markFailed();
-        } else {
-          tag.textContent = "отправлено";
-          tag.classList.add("ok");
         }
       }
     }
