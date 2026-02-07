@@ -343,11 +343,15 @@ wss.on("connection", (ws, req) => {
   let tcpClosed = false;
   let wsPaused = false;
 
-  const closeBoth = (reason) => {
+  const closeBoth = (reason, wsCode = null) => {
     if (reason) console.log(`[bridge] closing: ${reason}`);
     if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
       try {
-        ws.close();
+        if (wsCode) {
+          ws.close(wsCode, reason ? String(reason).slice(0, 120) : "");
+        } else {
+          ws.close();
+        }
       } catch (_) {}
     }
     if (!tcpClosed) {
@@ -368,7 +372,7 @@ wss.on("connection", (ws, req) => {
     while (tcpBuffer.length >= 4) {
       const frameLen = tcpBuffer.readUInt32BE(0);
       if (frameLen > MAX_PAYLOAD) {
-        closeBoth(`tcp frame too large (${frameLen})`);
+        closeBoth(`tcp frame too large (${frameLen})`, 1009);
         return;
       }
       if (tcpBuffer.length < 4 + frameLen) {
@@ -432,7 +436,7 @@ wss.on("connection", (ws, req) => {
     const payload = Buffer.isBuffer(data) ? data : Buffer.from(String(data), "utf8");
 
     if (payload.length > MAX_PAYLOAD) {
-      closeBoth(`ws message too large (${payload.length})`);
+      closeBoth(`ws message too large (${payload.length})`, 1009);
       return;
     }
 
@@ -579,6 +583,7 @@ wss.on("connection", (ws, req) => {
         const payloadSize = JSON.stringify(parsed.payload || {}).length;
         if (type.startsWith("e2ee:") && payloadSize > 8 * 1024) {
           console.log("[signal] e2ee payload too large");
+          closeBoth("e2ee payload too large", 1009);
           return;
         }
         sendJson(clientsById.get(to), parsed);
