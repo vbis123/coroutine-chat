@@ -94,6 +94,7 @@
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const FILE_DEDUP_LIMIT = 200;
   const ACK_PREFIX = "::ack::";
+  const ACK_TIMEOUT_MS = 30000;
   const loadAppConfig = async () => {
     if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
     try {
@@ -225,6 +226,11 @@
       cleanupVoice("ws_closed");
       cleanupCall("disconnect");
       updateVoiceUI();
+      for (const [id, timer] of pendingAcks.entries()) {
+        clearTimeout(timer);
+        pendingAcks.delete(id);
+        markAckFailed(id);
+      }
       if (manualDisconnect) {
         manualDisconnect = false;
         return;
@@ -557,6 +563,39 @@
     return wrapper;
   };
 
+  const pendingAcks = new Map();
+
+  const markAckFailed = (id) => {
+    const node = document.querySelector(`.msg[data-msg-id="${id}"] .tag`);
+    if (node) {
+      node.textContent = "ошибка";
+      node.classList.remove("ok");
+      node.classList.add("fail");
+    }
+  };
+
+  const registerPendingAck = (id) => {
+    if (!id) return;
+    if (pendingAcks.has(id)) clearTimeout(pendingAcks.get(id));
+    const timer = setTimeout(() => {
+      pendingAcks.delete(id);
+      markAckFailed(id);
+    }, ACK_TIMEOUT_MS);
+    pendingAcks.set(id, timer);
+  };
+
+  const resolveAck = (id) => {
+    if (!id) return;
+    const timer = pendingAcks.get(id);
+    if (timer) clearTimeout(timer);
+    pendingAcks.delete(id);
+    const node = document.querySelector(`.msg[data-msg-id="${id}"] .tag`);
+    if (node) {
+      node.textContent = "отправлено";
+      node.classList.add("ok");
+    }
+  };
+
   const parseFilePayload = (text) => {
     if (!text || !text.startsWith(FILE_PREFIX)) return null;
     const raw = text.slice(FILE_PREFIX.length);
@@ -632,11 +671,7 @@
     let messageId = parsed.id || null;
     const ackId = parseAck(body);
     if (ackId) {
-      const node = document.querySelector(`.msg[data-msg-id="${ackId}"] .tag`);
-      if (node) {
-        node.textContent = "отправлено";
-        node.classList.add("ok");
-      }
+      resolveAck(ackId);
       return;
     }
     let file = null;
@@ -2072,6 +2107,7 @@
     if (localNode) {
       localNode.dataset.msgId = msgId;
     }
+    registerPendingAck(msgId);
     ws.send(payload);
     if (localNode) {
       const tag = localNode.querySelector(".tag");
