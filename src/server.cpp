@@ -108,7 +108,26 @@ private:
 class Server {
 public:
   Server(boost::asio::io_context &io, uint16_t port, ServerOptions options)
-      : io_(io), acceptor_(io, tcp::endpoint(tcp::v4(), port)), options_(std::move(options)) {}
+      : io_(io), acceptor_(io), options_(std::move(options)) {
+    boost::system::error_code ec;
+    tcp::endpoint endpoint(tcp::v4(), port);
+    acceptor_.open(endpoint.protocol(), ec);
+    if (ec) {
+      throw std::runtime_error("open: " + ec.message());
+    }
+    acceptor_.set_option(boost::asio::socket_base::reuse_address(true), ec);
+    if (ec) {
+      throw std::runtime_error("set_option: " + ec.message());
+    }
+    acceptor_.bind(endpoint, ec);
+    if (ec) {
+      throw std::runtime_error("bind: " + ec.message());
+    }
+    acceptor_.listen(boost::asio::socket_base::max_listen_connections, ec);
+    if (ec) {
+      throw std::runtime_error("listen: " + ec.message());
+    }
+  }
 
   void run() {
     co_spawn(io_, [this]() -> awaitable<void> { co_return co_await accept_loop(); }, detached);
