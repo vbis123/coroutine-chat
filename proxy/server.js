@@ -15,7 +15,7 @@ const TCP_HOST = process.env.TCP_HOST || "127.0.0.1";
 const TCP_PORT = Number(process.env.TCP_PORT || 9000);
 
 const MAX_PAYLOAD = 12 * 1024 * 1024; // 12MB
-const MAX_WS_QUEUE = 2 * 1024 * 1024; // 2MB
+const MAX_WS_QUEUE = 16 * 1024 * 1024; // 16MB
 const WS_BACKPRESSURE_HIGH = 2 * 1024 * 1024;
 const WS_BACKPRESSURE_LOW = 512 * 1024;
 const DATA_DIR = path.join(__dirname, "..", "data");
@@ -342,6 +342,7 @@ wss.on("connection", (ws, req) => {
   let wsQueueBytes = 0;
   let tcpClosed = false;
   let wsPaused = false;
+  let wsPausedOutgoing = false;
 
   const closeBoth = (reason, wsCode = null) => {
     if (reason) console.log(`[bridge] closing: ${reason}`);
@@ -416,6 +417,10 @@ wss.on("connection", (ws, req) => {
       wsQueueBytes -= buffer.length;
       wsQueue.shift();
       if (!ok) return;
+    }
+    if (wsPausedOutgoing && wsQueueBytes < MAX_WS_QUEUE / 2) {
+      wsPausedOutgoing = false;
+      ws.resume();
     }
   };
 
@@ -606,6 +611,10 @@ wss.on("connection", (ws, req) => {
     if (!ok) {
       wsQueueBytes += frame.length;
       wsQueue.push({ buffer: frame });
+      if (!wsPausedOutgoing && wsQueueBytes > MAX_WS_QUEUE / 2) {
+        wsPausedOutgoing = true;
+        ws.pause();
+      }
       if (wsQueueBytes > MAX_WS_QUEUE) {
         closeBoth("ws->tcp queue overflow", 1013);
       }
