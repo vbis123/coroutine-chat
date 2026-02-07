@@ -3,6 +3,11 @@
   const chatEl = document.getElementById("chat");
   const formEl = document.getElementById("form");
   const messageEl = document.getElementById("message");
+  const fileBtn = document.getElementById("file-btn");
+  const fileInput = document.getElementById("file-input");
+  const fileChip = document.getElementById("file-chip");
+  const fileNameEl = document.getElementById("file-name");
+  const fileClear = document.getElementById("file-clear");
   const nicknameEl = document.getElementById("nickname");
   const connectBtn = document.getElementById("connect-btn");
   const recipientEl = document.getElementById("recipient");
@@ -83,6 +88,8 @@
   const AUTH_TAB_KEY = "authTab";
   const DND_KEY = "callDnd";
   const BLOCKED_KEY = "callBlocked";
+  const FILE_PREFIX = "::file::";
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const loadAppConfig = async () => {
     if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
     try {
@@ -390,6 +397,16 @@
     return btoa(binary);
   };
 
+  const b64EncodeBuffer = (buffer) => b64Encode(new Uint8Array(buffer));
+
+  const formatBytes = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
+  };
+
   const b64Decode = (text) => {
     const binary = atob(text);
     const bytes = new Uint8Array(binary.length);
@@ -452,7 +469,7 @@
     return decoder.decode(plaintext);
   };
 
-  const renderMessage = ({ kind, from, to, body, encrypted, decrypted, encryptedPayload, status }) => {
+  const renderMessage = ({ kind, from, to, body, file, encrypted, decrypted, encryptedPayload, status }) => {
     const nickname = getNickname();
     const isMe = from && from === nickname;
     const time = new Date().toLocaleTimeString("ru-RU", {
@@ -490,13 +507,61 @@
 
     const content = document.createElement("div");
     content.className = "content";
-    content.textContent = body;
+    if (file) {
+      if (body) {
+        const text = document.createElement("div");
+        text.textContent = body;
+        content.appendChild(text);
+      }
+      const fileBlock = document.createElement("div");
+      fileBlock.className = "file-attachment";
+      const link = document.createElement("a");
+      link.textContent = file.name || "file";
+      link.download = file.name || "file";
+      link.href = file.url || "#";
+      const meta = document.createElement("span");
+      meta.textContent = `${file.type || "application/octet-stream"} • ${formatBytes(file.size || 0)}`;
+      fileBlock.appendChild(link);
+      fileBlock.appendChild(meta);
+      content.appendChild(fileBlock);
+    } else {
+      content.textContent = body;
+    }
 
     wrapper.appendChild(meta);
     wrapper.appendChild(content);
     chatEl.appendChild(wrapper);
     chatEl.scrollTop = chatEl.scrollHeight;
     return wrapper;
+  };
+
+  const parseFilePayload = (text) => {
+    if (!text || !text.startsWith(FILE_PREFIX)) return null;
+    const raw = text.slice(FILE_PREFIX.length);
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.kind !== "file") return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const buildFileView = (filePayload) => {
+    if (!filePayload || !filePayload.data) return null;
+    try {
+      const bytes = b64Decode(filePayload.data);
+      const blob = new Blob([bytes], { type: filePayload.type || "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      return {
+        name: filePayload.name,
+        type: filePayload.type,
+        size: filePayload.size,
+        url,
+      };
+    } catch (_) {
+      return null;
+    }
   };
 
   const handleIncoming = async (text) => {
@@ -524,6 +589,7 @@
     }
 
     let body = parsed.body;
+    let file = null;
     let encrypted = false;
     let decrypted = false;
     let encryptedPayload = null;
@@ -544,12 +610,19 @@
       }
     }
 
+    const filePayload = parseFilePayload(body);
+    if (filePayload) {
+      file = buildFileView(filePayload);
+      body = filePayload.text || "";
+    }
+
     const to = parsed.direct ? getNickname() : "all";
     renderMessage({
       kind: "chat",
       from: parsed.from,
       to,
       body,
+      file,
       encrypted,
       decrypted,
       encryptedPayload,
@@ -1850,9 +1923,26 @@
 
   call.fsm = CallFSM.create({ onStateChange: handleCallStateChange });
 
+  let pendingFile = null;
+
+  const clearPendingFile = () => {
+    pendingFile = null;
+    fileInput.value = "";
+    fileChip.classList.add("hidden");
+    fileNameEl.textContent = "";
+  };
+
+  const loadFile = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(file);
+    });
+
   const sendMessage = async () => {
     const body = messageEl.value.trim();
-    if (!body) return;
+    if (!body && !pendingFile) return;
 
     if (!hasNickname()) {
       setStatus("disconnected");
@@ -1871,10 +1961,23 @@
     addNickname(nickname);
 
     let payload = body;
+    let fileMeta = null;
     const isDirect = to !== "all";
     let encryptedPayload = null;
+    if (pendingFile) {
+      const filePayload = {
+        kind: "file",
+        name: pendingFile.name,
+        type: pendingFile.type,
+        size: pendingFile.size,
+        data: pendingFile.data,
+        text: body || "",
+      };
+      payload = `${FILE_PREFIX}${JSON.stringify(filePayload)}`;
+      fileMeta = buildFileView(filePayload);
+    }
     if (secret) {
-      payload = await encryptBody(body, secret);
+      payload = await encryptBody(payload, secret);
       encryptedPayload = parseEncryptedBody(payload);
     }
 
@@ -1887,6 +1990,7 @@
       from: nickname,
       to: isDirect ? to : "all",
       body,
+      file: fileMeta,
       encrypted: Boolean(encryptedPayload),
       decrypted: Boolean(encryptedPayload),
       encryptedPayload,
@@ -1910,6 +2014,7 @@
       }
     }
     messageEl.value = "";
+    clearPendingFile();
   };
 
   formEl.addEventListener("submit", (event) => {
@@ -1935,6 +2040,41 @@
       return;
     }
     connect();
+  });
+
+  fileBtn.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      renderMessage({
+        kind: "system",
+        body: `Файл слишком большой. Максимум ${formatBytes(MAX_FILE_BYTES)}.`,
+      });
+      clearPendingFile();
+      return;
+    }
+    try {
+      const buffer = await loadFile(file);
+      pendingFile = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        data: b64EncodeBuffer(buffer),
+      };
+      fileNameEl.textContent = `${file.name} (${formatBytes(file.size)})`;
+      fileChip.classList.remove("hidden");
+    } catch (_) {
+      renderMessage({ kind: "system", body: "Не удалось прочитать файл." });
+      clearPendingFile();
+    }
+  });
+
+  fileClear.addEventListener("click", () => {
+    clearPendingFile();
   });
 
   voiceJoinBtn.addEventListener("click", () => {

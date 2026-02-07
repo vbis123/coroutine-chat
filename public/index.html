@@ -114,6 +114,14 @@
           <div class="chat" id="chat"></div>
 
           <form id="form" class="composer">
+            <div class="composer-files">
+              <button type="button" id="file-btn">Файл</button>
+              <input id="file-input" type="file" class="hidden" />
+              <div class="file-chip hidden" id="file-chip">
+                <span id="file-name"></span>
+                <button type="button" id="file-clear">×</button>
+              </div>
+            </div>
             <textarea
               id="message"
               rows="3"
