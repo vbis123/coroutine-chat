@@ -41,7 +41,6 @@
   const panelChat = document.getElementById("panel-chat");
   const panelVoice = document.getElementById("panel-voice");
   const panelCalls = document.getElementById("panel-calls");
-  const wsDebugEl = document.getElementById("ws-debug");
   const voiceJoinBtn = document.getElementById("voice-join");
   const voiceLeaveBtn = document.getElementById("voice-leave");
   const voiceMuteBtn = document.getElementById("voice-mute");
@@ -117,17 +116,6 @@
     reconnecting: "Переподключение",
   };
 
-  const appendWsDebug = (text) => {
-    if (!wsDebugEl) return;
-    wsDebugEl.classList.remove("hidden");
-    const line = document.createElement("div");
-    const time = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    line.textContent = `[${time}] ${text}`;
-    wsDebugEl.appendChild(line);
-    while (wsDebugEl.childNodes.length > 12) {
-      wsDebugEl.removeChild(wsDebugEl.firstChild);
-    }
-  };
 
   const voice = {
     joined: false,
@@ -219,7 +207,6 @@
       nicknameEl.disabled = true;
       connectBtn.textContent = "Отключиться";
       updateVoiceUI();
-      appendWsDebug("WS open");
     });
 
     ws.addEventListener("message", (event) => {
@@ -240,7 +227,6 @@
       cleanupVoice("ws_closed");
       cleanupCall("disconnect");
       updateVoiceUI();
-      appendWsDebug(`WS close code=${event.code || 0} reason=${event.reason || "-"}`);
       for (const [id, timer] of pendingAcks.entries()) {
         clearTimeout(timer);
         pendingAcks.delete(id);
@@ -258,7 +244,6 @@
     ws.addEventListener("error", () => {
       setStatus("disconnected");
       updateVoiceUI();
-      appendWsDebug("WS error");
     });
   };
 
