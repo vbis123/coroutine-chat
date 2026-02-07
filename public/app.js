@@ -93,6 +93,7 @@
   const FILE_PREFIX = "::file::";
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const FILE_DEDUP_LIMIT = 200;
+  const ACK_PREFIX = "::ack::";
   const loadAppConfig = async () => {
     if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
     try {
@@ -365,15 +366,28 @@
 
     let match = text.match(/^\[from\s+([^\]]+)\]\s*(.*)$/);
     if (match) {
-      return { kind: "chat", from: match[1], body: match[2], direct: true };
+      return parseChatPayload(match[1], match[2], true);
     }
 
     match = text.match(/^\[([^\]]+)\]\s*(.*)$/);
     if (match) {
-      return { kind: "chat", from: match[1], body: match[2], direct: false };
+      return parseChatPayload(match[1], match[2], false);
     }
 
     return { kind: "system", body: text };
+  };
+
+  const parseChatPayload = (from, raw, direct) => {
+    if (!raw) return { kind: "chat", from, body: "", direct, id: null };
+    if (raw[0] === "{") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && "body" in parsed && "id" in parsed) {
+          return { kind: "chat", from, body: String(parsed.body || ""), direct, id: String(parsed.id || "") };
+        }
+      } catch (_) {}
+    }
+    return { kind: "chat", from, body: raw, direct, id: null };
   };
 
   const parseEncryptedBody = (body) => {
@@ -550,6 +564,12 @@
     }
   };
 
+  const parseAck = (text) => {
+    if (!text || !text.startsWith(ACK_PREFIX)) return null;
+    const id = text.slice(ACK_PREFIX.length).trim();
+    return id || null;
+  };
+
   const rememberFileId = (id) => {
     if (!id) return false;
     if (seenFileIds.has(id)) return false;
@@ -604,6 +624,15 @@
     }
 
     let body = parsed.body;
+    const ackId = parseAck(body);
+    if (ackId) {
+      const node = document.querySelector(`.msg[data-msg-id="${ackId}"] .tag`);
+      if (node) {
+        node.textContent = "отправлено";
+        node.classList.add("ok");
+      }
+      return;
+    }
     let file = null;
     let encrypted = false;
     let decrypted = false;
@@ -645,6 +674,15 @@
       decrypted,
       encryptedPayload,
     });
+
+    if (!encryptedPayload && parsed.id) {
+      const ackPayload = `${ACK_PREFIX}${parsed.id}`;
+      if (parsed.direct) {
+        ws.send(`@${parsed.from} ${ackPayload}`);
+      } else {
+        ws.send(ackPayload);
+      }
+    }
   };
 
   const sendNickname = () => {
@@ -1982,6 +2020,7 @@
     let fileMeta = null;
     const isDirect = to !== "all";
     let encryptedPayload = null;
+    const msgId = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     if (pendingFile) {
       const filePayload = {
         kind: "file",
@@ -1995,6 +2034,7 @@
       payload = `${FILE_PREFIX}${JSON.stringify(filePayload)}`;
       fileMeta = buildFileView(filePayload);
     }
+    payload = JSON.stringify({ id: msgId, body: payload });
     if (secret) {
       payload = await encryptBody(payload, secret);
       encryptedPayload = parseEncryptedBody(payload);
@@ -2015,6 +2055,9 @@
       encryptedPayload,
       status: "pending",
     });
+    if (localNode) {
+      localNode.dataset.msgId = msgId;
+    }
     ws.send(payload);
     if (localNode) {
       const tag = localNode.querySelector(".tag");
