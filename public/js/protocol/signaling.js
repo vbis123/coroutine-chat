@@ -4,6 +4,8 @@
     "voice:leave",
     "voice:who",
     "voice:state",
+    "voice:floor:take",
+    "voice:floor:release",
     "webrtc:offer",
     "webrtc:answer",
     "webrtc:ice",

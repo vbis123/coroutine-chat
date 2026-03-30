@@ -243,6 +243,8 @@ const SIGNAL_TYPES = new Set([
   "voice:leave",
   "voice:who",
   "voice:state",
+  "voice:floor:take",
+  "voice:floor:release",
   "webrtc:offer",
   "webrtc:answer",
   "webrtc:ice",
@@ -264,6 +266,7 @@ const SIGNAL_TYPES = new Set([
 const clientsById = new Map();
 const clientInfo = new WeakMap();
 const voiceRooms = new Map();
+const voiceFloorOwners = new Map();
 const callSessions = new Map();
 const inviteRate = new Map();
 
@@ -287,6 +290,16 @@ const broadcastRoom = (room, payload, excludeId = null) => {
     const peer = clientsById.get(id);
     if (peer) sendJson(peer, payload);
   }
+};
+
+const getVoiceParticipants = (room) => {
+  const roster = voiceRooms.get(room);
+  if (!roster) return [];
+  return Array.from(roster.entries()).map(([id, state]) => ({
+    id,
+    muted: Boolean(state.muted),
+    speaking: Boolean(state.speaking),
+  }));
 };
 
 const validateSignal = (msg, wsId) => {
@@ -472,19 +485,15 @@ wss.on("connection", (ws, req) => {
       const to = parsed.to;
 
       if (type === "voice:who") {
-        const roster = voiceRooms.get(room);
-        const participants = roster
-          ? Array.from(roster.entries()).map(([id, state]) => ({
-              id,
-              muted: Boolean(state.muted),
-              speaking: Boolean(state.speaking),
-            }))
-          : [];
+        const participants = getVoiceParticipants(room);
         sendJson(ws, {
           type: "voice:state",
           room,
           from: "server",
-          payload: { participants },
+          payload: {
+            participants,
+            floorOwner: voiceFloorOwners.get(room) || null,
+          },
         });
         return;
       }
@@ -502,11 +511,8 @@ wss.on("connection", (ws, req) => {
           room,
           from: "server",
           payload: {
-            participants: Array.from(roster.entries()).map(([id, state]) => ({
-              id,
-              muted: Boolean(state.muted),
-              speaking: Boolean(state.speaking),
-            })),
+            participants: getVoiceParticipants(room),
+            floorOwner: voiceFloorOwners.get(room) || null,
           },
         });
         broadcastRoom(room, { type: "voice:join", room, from }, from);
@@ -518,6 +524,20 @@ wss.on("connection", (ws, req) => {
         if (roster) {
           roster.delete(from);
           if (roster.size === 0) voiceRooms.delete(room);
+        }
+        const floorOwner = voiceFloorOwners.get(room);
+        if (floorOwner === from) {
+          voiceFloorOwners.delete(room);
+          broadcastRoom(
+            room,
+            {
+              type: "voice:state",
+              room,
+              from: "server",
+              payload: { participants: getVoiceParticipants(room), floorOwner: null },
+            },
+            from
+          );
         }
         info.voice = false;
         broadcastRoom(room, { type: "voice:leave", room, from }, from);
@@ -531,6 +551,28 @@ wss.on("connection", (ws, req) => {
         state.muted = Boolean(parsed.payload && parsed.payload.muted);
         state.speaking = Boolean(parsed.payload && parsed.payload.speaking);
         broadcastRoom(room, { type: "voice:state", room, from, payload: state }, from);
+        return;
+      }
+
+      if (type === "voice:floor:take") {
+        const roster = voiceRooms.get(room);
+        if (!roster || !roster.has(from)) return;
+        if (voiceFloorOwners.get(room)) return;
+        voiceFloorOwners.set(room, from);
+        const payload = { participants: getVoiceParticipants(room), floorOwner: from };
+        sendJson(ws, { type: "voice:state", room, from: "server", payload });
+        broadcastRoom(room, { type: "voice:state", room, from: "server", payload }, from);
+        return;
+      }
+
+      if (type === "voice:floor:release") {
+        const roster = voiceRooms.get(room);
+        if (!roster || !roster.has(from)) return;
+        if (voiceFloorOwners.get(room) !== from) return;
+        voiceFloorOwners.delete(room);
+        const payload = { participants: getVoiceParticipants(room), floorOwner: null };
+        sendJson(ws, { type: "voice:state", room, from: "server", payload });
+        broadcastRoom(room, { type: "voice:state", room, from: "server", payload }, from);
         return;
       }
 
@@ -650,7 +692,20 @@ wss.on("connection", (ws, req) => {
       const roster = voiceRooms.get(wsInfo.room);
       if (roster) {
         roster.delete(wsInfo.id);
-        if (roster.size === 0) voiceRooms.delete(wsInfo.room);
+        const roomOwner = voiceFloorOwners.get(wsInfo.room);
+        if (roomOwner === wsInfo.id) {
+          voiceFloorOwners.delete(wsInfo.room);
+          broadcastRoom(wsInfo.room, {
+            type: "voice:state",
+            room: wsInfo.room,
+            from: "server",
+            payload: { participants: getVoiceParticipants(wsInfo.room), floorOwner: null },
+          });
+        }
+        if (roster.size === 0) {
+          voiceRooms.delete(wsInfo.room);
+          voiceFloorOwners.delete(wsInfo.room);
+        }
         broadcastRoom(wsInfo.room, { type: "voice:leave", room: wsInfo.room, from: wsInfo.id }, wsInfo.id);
       }
     }
