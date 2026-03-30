@@ -45,7 +45,9 @@
   const voiceLeaveBtn = document.getElementById("voice-leave");
   const voiceMuteBtn = document.getElementById("voice-mute");
   const voicePttBtn = document.getElementById("voice-ptt");
+  const voiceFloorBtn = document.getElementById("voice-floor");
   const voiceMicStatus = document.getElementById("voice-mic-status");
+  const voiceFloorStatus = document.getElementById("voice-floor-status");
   const voiceWarning = document.getElementById("voice-warning");
   const voiceSecretHint = document.getElementById("voice-secret-hint");
   const voiceParticipantsEl = document.getElementById("voice-participants");
@@ -129,6 +131,7 @@
     pttActive: false,
     pttRestoreMuted: true,
     audioCtx: null,
+    floorOwner: null,
   };
   let voiceLocalSpeaking = false;
 
@@ -784,19 +787,38 @@
     sendSignal({ type: "voice:who", room });
   };
 
+  const hasVoiceFloor = () => Boolean(voice.floorOwner);
+  const canSpeakInVoice = () => !voice.floorOwner || voice.floorOwner === getNickname();
+  const effectiveVoiceMuted = () => voice.muted || !canSpeakInVoice();
+
+  const applyVoiceTrackState = () => {
+    if (!voice.localStream) return;
+    const enabled = !effectiveVoiceMuted();
+    voice.localStream.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  };
+
   const updateVoiceUI = () => {
     const hasSecret = hasVoiceSecret();
+    const floorMine = voice.floorOwner && voice.floorOwner === getNickname();
+    const floorBusy = hasVoiceFloor();
     voiceJoinBtn.classList.toggle("hidden", voice.joined);
     voiceLeaveBtn.classList.toggle("hidden", !voice.joined);
     voiceJoinBtn.disabled = !hasSecret || !ws || ws.readyState !== WebSocket.OPEN;
     voiceLeaveBtn.disabled = !voice.joined;
-    voiceMuteBtn.disabled = !voice.joined;
-    voicePttBtn.disabled = !voice.joined;
+    voiceMuteBtn.disabled = !voice.joined || (floorBusy && !floorMine);
+    voicePttBtn.disabled = !voice.joined || (floorBusy && !floorMine);
+    voiceFloorBtn.disabled = !voice.joined || (floorBusy && !floorMine);
     voiceSecretHint.classList.toggle("hidden", hasSecret);
     voiceMuteBtn.textContent = voice.muted ? "Включить" : "Выключить";
+    voiceFloorBtn.textContent = floorMine ? "Отпустить микрофон" : "Забрать микрофон";
     voiceMicStatus.textContent = voice.joined
-      ? `Микрофон: ${voice.muted ? "мут" : "живой"}`
+      ? `Микрофон: ${effectiveVoiceMuted() ? "мут" : "живой"}`
       : "Микрофон: выкл";
+    voiceFloorStatus.textContent = hasVoiceFloor()
+      ? `Общий микрофон удерживает: ${voice.floorOwner}`
+      : "Общий микрофон: свободен";
   };
 
   const setVoiceWarning = (show) => {
@@ -809,12 +831,13 @@
     entries.forEach(([id, state]) => {
       const row = document.createElement("div");
       const speaking = Boolean(state.speaking);
+      const ownsFloor = voice.floorOwner === id;
       row.className = `voice-participant${speaking ? " speaking" : ""}`;
       const label = document.createElement("span");
-      label.textContent = id;
+      label.textContent = ownsFloor ? `${id} 🎙` : id;
       const status = document.createElement("span");
       status.className = "state";
-      status.textContent = state.muted ? "muted" : speaking ? "speaking" : "listening";
+      status.textContent = ownsFloor ? "держит микрофон" : state.muted ? "muted" : speaking ? "speaking" : "listening";
       row.appendChild(label);
       row.appendChild(status);
       voiceParticipantsEl.appendChild(row);
@@ -898,14 +921,15 @@
 
   const sendVoiceState = (muted, speaking) => {
     if (!voice.joined) return;
+    const reportedMuted = Boolean(muted || !canSpeakInVoice());
     const now = Date.now();
-    const changed = muted !== lastVoiceState.muted || speaking !== lastVoiceState.speaking;
+    const changed = reportedMuted !== lastVoiceState.muted || speaking !== lastVoiceState.speaking;
     if (!changed && now - lastVoiceStateAt < 1000) return;
-    lastVoiceState = { muted, speaking };
+    lastVoiceState = { muted: reportedMuted, speaking };
     lastVoiceStateAt = now;
     sendSignal({
       type: "voice:state",
-      payload: { muted, speaking },
+      payload: { muted: reportedMuted, speaking },
     });
   };
 
@@ -988,6 +1012,8 @@
       voice.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       voice.joined = true;
       voice.muted = false;
+      voice.floorOwner = null;
+      applyVoiceTrackState();
       voiceJoinBtn.blur();
       updateVoiceUI();
       console.log("[voice] joined");
@@ -1002,7 +1028,7 @@
         renderVoiceParticipants();
         sendVoiceState(voice.muted, voiceLocalSpeaking);
       });
-      voice.roster.set(getNickname(), { muted: voice.muted, speaking: false });
+      voice.roster.set(getNickname(), { muted: effectiveVoiceMuted(), speaking: false });
       renderVoiceParticipants();
       for (const peerId of voice.roster.keys()) {
         if (peerId === getNickname()) continue;
@@ -1034,6 +1060,8 @@
     voice.muted = false;
     voiceLocalSpeaking = false;
     voice.room = null;
+    voice.floorOwner = null;
+    voice.pttActive = false;
     stopSpeakingMonitor("local");
     for (const peerId of Array.from(voice.peers.keys())) {
       closeVoicePeer(peerId);
@@ -1052,25 +1080,22 @@
   const toggleVoiceMute = () => {
     if (!voice.joined || !voice.localStream) return;
     voice.muted = !voice.muted;
-    voice.localStream.getAudioTracks().forEach((track) => {
-      track.enabled = !voice.muted;
-    });
+    applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     const selfState = voice.roster.get(getNickname()) || {};
-    voice.roster.set(getNickname(), { ...selfState, muted: voice.muted });
+    voice.roster.set(getNickname(), { ...selfState, muted: effectiveVoiceMuted() });
     renderVoiceParticipants();
     updateVoiceUI();
   };
 
   const pttDown = () => {
     if (!voice.joined || !voice.localStream) return;
+    if (!canSpeakInVoice()) return;
     if (voice.pttActive) return;
     voice.pttActive = true;
     voice.pttRestoreMuted = voice.muted;
     voice.muted = false;
-    voice.localStream.getAudioTracks().forEach((track) => {
-      track.enabled = true;
-    });
+    applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     updateVoiceUI();
   };
@@ -1080,11 +1105,20 @@
     if (!voice.pttActive) return;
     voice.pttActive = false;
     voice.muted = voice.pttRestoreMuted;
-    voice.localStream.getAudioTracks().forEach((track) => {
-      track.enabled = !voice.muted;
-    });
+    applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     updateVoiceUI();
+  };
+
+  const toggleVoiceFloor = () => {
+    if (!voice.joined) return;
+    const mine = voice.floorOwner === getNickname();
+    if (mine) {
+      sendSignal({ type: "voice:floor:release" });
+      return;
+    }
+    if (hasVoiceFloor()) return;
+    sendSignal({ type: "voice:floor:take" });
   };
 
   const handleVoiceOffer = async (from, sdp) => {
@@ -1751,11 +1785,22 @@
     }
     if (msg.type === "voice:state") {
       if (msg.payload && Array.isArray(msg.payload.participants)) {
+        if (Object.prototype.hasOwnProperty.call(msg.payload, "floorOwner")) {
+          voice.floorOwner = msg.payload.floorOwner || null;
+        }
         voice.roster = new Map(
           msg.payload.participants.map((p) => [p.id, { muted: p.muted, speaking: p.speaking }])
         );
+        const me = getNickname();
+        if (voice.roster.has(me)) {
+          const selfState = voice.roster.get(me) || {};
+          voice.roster.set(me, { ...selfState, muted: effectiveVoiceMuted() });
+        }
+        applyVoiceTrackState();
+        sendVoiceState(voice.muted, voiceLocalSpeaking);
         setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
         renderVoiceParticipants();
+        updateVoiceUI();
         if (voice.joined) {
           for (const peerId of voice.roster.keys()) {
             if (peerId === getNickname()) continue;
@@ -1805,9 +1850,13 @@
     if (msg.type === "voice:leave") {
       if (!msg.from) return;
       voice.roster.delete(msg.from);
+      if (voice.floorOwner === msg.from) {
+        voice.floorOwner = null;
+      }
       closeVoicePeer(msg.from);
       setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
       renderVoiceParticipants();
+      updateVoiceUI();
       return;
     }
 
@@ -2198,6 +2247,10 @@
 
   voiceMuteBtn.addEventListener("click", () => {
     toggleVoiceMute();
+  });
+
+  voiceFloorBtn.addEventListener("click", () => {
+    toggleVoiceFloor();
   });
 
   voicePttBtn.addEventListener("mousedown", (event) => {
