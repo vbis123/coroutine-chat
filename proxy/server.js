@@ -57,7 +57,16 @@ app.get("/config.json", (req, res) => {
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
+app.use(
+  express.static(path.join(__dirname, "..", "public"), {
+    setHeaders(res, filePath) {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === ".html" || ext === ".js" || ext === ".css") {
+        res.setHeader("Cache-Control", "no-store");
+      }
+    },
+  })
+);
 
 app.get("/config.js", (req, res) => {
   res.type("application/javascript");

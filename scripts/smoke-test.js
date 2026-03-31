@@ -97,6 +97,7 @@ checkEnv();
 checkContains("proxy/server.js", "voice:join", "proxy has voice signaling types");
 checkContains("proxy/server.js", "call:invite", "proxy has call signaling types");
 checkContains("proxy/server.js", "/config.js", "proxy serves /config.js");
+checkContains("proxy/server.js", "Cache-Control\", \"no-store\"", "proxy disables cache for static html/js/css");
 checkContains("public/index.html", "/js/audio_alerts.js", "index loads audio_alerts.js");
 checkContains("public/index.html", "/js/e2ee/e2ee.js", "index loads e2ee.js");
 checkContains("public/app.js", "handleSignal", "client has handleSignal");
