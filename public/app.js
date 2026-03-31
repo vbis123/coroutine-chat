@@ -819,6 +819,7 @@
     voiceFloorStatus.textContent = hasVoiceFloor()
       ? `Общий микрофон удерживает: ${voice.floorOwner}`
       : "Общий микрофон: свободен";
+    voiceFloorStatus.classList.toggle("busy", floorBusy);
   };
 
   const setVoiceWarning = (show) => {

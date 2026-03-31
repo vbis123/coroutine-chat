@@ -519,6 +519,11 @@ button:hover {
   color: var(--muted);
 }
 
+.voice-status .busy {
+  color: #b42318;
+  font-weight: 700;
+}
+
 .voice-secret-hint {
   font-size: 13px;
   color: #8a5b2f;
