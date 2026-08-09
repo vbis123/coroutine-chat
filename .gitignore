@@ -3,10 +3,15 @@ node_modules/
 
 # build artifacts
 build/
+build-*/
 dist/
 out/
 .cache/
 .tmp/
+*.log
+
+# local runtime state
+data/*.json
 
 # OS/editor
 .DS_Store
