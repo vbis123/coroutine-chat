@@ -1,9 +1,8 @@
 #include <boost/asio.hpp>
 
-#include <arpa/inet.h>
+#include "chat_framing.hpp"
 
 #include <deque>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -14,36 +13,8 @@ using boost::asio::co_spawn;
 using boost::asio::detached;
 using boost::asio::ip::tcp;
 using boost::asio::use_awaitable;
-
-namespace {
-constexpr std::size_t kMaxMessageSize = 12 * 1024 * 1024; // 12 MB
-
-std::string make_frame(const std::string &payload) {
-  uint32_t len = static_cast<uint32_t>(payload.size());
-  uint32_t net_len = htonl(len);
-  std::string frame;
-  frame.resize(sizeof(uint32_t) + payload.size());
-  std::memcpy(frame.data(), &net_len, sizeof(uint32_t));
-  std::memcpy(frame.data() + sizeof(uint32_t), payload.data(), payload.size());
-  return frame;
-}
-
-awaitable<std::string> read_frame(tcp::socket &socket) {
-  uint32_t net_len = 0;
-  co_await boost::asio::async_read(socket, boost::asio::buffer(&net_len, sizeof(net_len)),
-                                  use_awaitable);
-  uint32_t len = ntohl(net_len);
-  if (len > kMaxMessageSize) {
-    throw std::runtime_error("message too large");
-  }
-  std::string payload;
-  payload.resize(len);
-  if (len > 0) {
-    co_await boost::asio::async_read(socket, boost::asio::buffer(payload), use_awaitable);
-  }
-  co_return payload;
-}
-} // namespace
+using chat::make_frame;
+using chat::read_frame;
 
 class Client : public std::enable_shared_from_this<Client> {
 public:

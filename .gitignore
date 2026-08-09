@@ -1,12 +1,18 @@
 # dependencies
 node_modules/
+.env
 
 # build artifacts
 build/
+build-*/
 dist/
 out/
 .cache/
 .tmp/
+*.log
+
+# local runtime state
+data/*.json
 
 # OS/editor
 .DS_Store
