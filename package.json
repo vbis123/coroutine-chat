@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node proxy/server.js",
     "dev": "node --watch proxy/server.js",
-    "test": "node scripts/smoke-test.js",
+    "test": "npm run test:unit && node scripts/smoke-test.js",
+    "test:unit": "node --test test/*.test.js",
     "check": "npm test"
   },
   "dependencies": {
