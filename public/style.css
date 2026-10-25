@@ -475,6 +475,26 @@ button:hover {
   background: #fffaf5;
 }
 
+.voice-room-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.voice-security,
+.voice-verification {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.voice-verification strong {
+  color: var(--ink);
+  letter-spacing: 0.08em;
+}
+
 .panel-title {
   font-weight: 700;
   margin-bottom: 10px;
@@ -553,6 +573,16 @@ button:hover {
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+#voice-remote-audio.playback-blocked {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
 }
 
 .voice-participant {
