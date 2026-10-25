@@ -70,7 +70,7 @@ async function main() {
       args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", `--use-file-for-fake-audio-capture=${wavPath}`, "--autoplay-policy=no-user-gesture-required"] });
     const pages = [];
     const errors = [];
-    const suffix = process.env.VOICE_TEST_URL ? `probe-${Date.now()}-` : "";
+    const suffix = process.env.VOICE_TEST_URL ? `probe-${Date.now().toString(36)}-` : "";
     const names = [suffix + "alice", suffix + "bob"];
     for (const name of names) {
       const context = await browser.newContext({ permissions: ["microphone"] });
@@ -188,6 +188,7 @@ async function main() {
       const encrypted = settings.some(Boolean);
       for (let i = 0; i < pages.length; i++) { await pages[i].locator("#menu-calls").click(); await pages[i].locator("#e2ee-toggle").setChecked(settings[i]); }
       await a.locator(".user-row").filter({ hasText: names[1] }).getByRole("button", { name: "Позвонить", exact: true }).click();
+      await b.waitForFunction(() => !document.querySelector("#incoming-call").classList.contains("hidden"));
       await b.locator("#call-accept").click();
       await delay(6000);
       if (encrypted) for (const page of pages) await page.locator("#e2ee-status").filter({ hasText: "E2EE включено" }).waitFor();
