@@ -520,6 +520,18 @@ button:hover {
   cursor: not-allowed;
 }
 
+#voice-join {
+  background: #15803d;
+  color: #fff;
+  border-color: transparent;
+}
+
+#voice-leave {
+  background: #d92d20;
+  color: #fff;
+  border-color: transparent;
+}
+
 .call-controls .danger {
   background: #d92d20;
   color: #fff;
