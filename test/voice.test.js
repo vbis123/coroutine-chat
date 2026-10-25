@@ -96,6 +96,9 @@ test("E2EE frame roundtrip authenticates and rejects plaintext, corruption and w
   await assert.rejects(decryptFrame({ data: encrypted }, wrong));
   const corrupt = encrypted.slice(0); new Uint8Array(corrupt)[20] ^= 1;
   await assert.rejects(decryptFrame({ data: corrupt }, key));
+  assert.equal(new Uint8Array(encrypted)[0], new Uint8Array(original)[0], "Opus TOC is preserved");
+  const badHeader = encrypted.slice(0); new Uint8Array(badHeader)[0] ^= 1;
+  await assert.rejects(decryptFrame({ data: badHeader }, key), "visible TOC is authenticated");
 });
 
 test("blocked playback exposes a retry, successful retry is observable", async () => {
@@ -147,4 +150,36 @@ test("sender and paired receiver hooks run synchronously before SDP", () => {
     onReceiver: (r) => { assert.equal(r, receiver); events.push("decrypt"); } });
   c.addLocalStream({ getTracks: () => [{ kind: "audio" }] });
   assert.deepEqual(events, ["track", "encrypt", "decrypt"]);
+});
+
+test("VPS room derivation preserves opaque IDs, key separation and verification code", async () => {
+  const sandbox = { window: {}, crypto: require("node:crypto").webcrypto, TextEncoder, Uint8Array, btoa };
+  vm.runInNewContext(source("crypto/voice-room"), sandbox);
+  const derive = sandbox.window.VoiceRoomCrypto.derive;
+  const a = await derive({ roomName: " room ", secret: "test passphrase", e2ee: true });
+  const b = await derive({ roomName: "room", secret: "test passphrase", e2ee: true });
+  const c = await derive({ roomName: "room", secret: "other passphrase", e2ee: true });
+  const plain = await derive({ roomName: "room", e2ee: false });
+  assert.equal(a.roomId, b.roomId); assert.equal(a.verificationCode, b.verificationCode);
+  assert.notEqual(a.roomId, c.roomId); assert.notEqual(a.roomId, plain.roomId);
+  assert.notDeepEqual(a.audioKey, c.audioKey);
+  assert.equal(plain.audioKey, null);
+  assert.ok(!a.roomId.includes("passphrase"));
+});
+
+test("ending a personal call does not terminate the encrypted room worker", () => {
+  const workers = [];
+  class Endpoint {}
+  Endpoint.prototype.transform = null;
+  const sandbox = { window: { RTCRtpSender: Endpoint, RTCRtpReceiver: Endpoint, RTCRtpScriptTransform: class {} },
+    RTCRtpSender: Endpoint, RTCRtpReceiver: Endpoint, RTCRtpScriptTransform: class {},
+    Worker: class { constructor() { workers.push(this); } addEventListener() {} terminate() { this.ended = true; } },
+    MessageChannel: class { constructor() { this.port1 = { postMessage() {} }; this.port2 = {}; } } };
+  vm.runInNewContext(source("e2ee/e2ee"), sandbox);
+  const e = sandbox.window.E2EE;
+  e.attachSenderTransform(new Endpoint(), new Uint8Array(32), "room");
+  e.attachSenderTransform(new Endpoint(), new Uint8Array(32));
+  e.reset();
+  assert.equal(workers[0].ended, undefined); assert.equal(workers[1].ended, true);
+  e.reset("room"); assert.equal(workers[0].ended, true);
 });

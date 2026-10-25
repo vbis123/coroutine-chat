@@ -64,26 +64,28 @@ async function main() {
       CERT_PATH: "", KEY_PATH: "", TURN_SECRET: "", TURN_URL: "", ICE_TRANSPORT_POLICY: "all" }, stdio: "ignore" });
   let browser;
   try {
-    const url = `http://localhost:${httpPort}`;
+    const url = process.env.VOICE_TEST_URL || `http://localhost:${httpPort}`;
     for (let i = 0; i < 100; i++) { try { if ((await fetch(url)).ok) break; } catch (_) {} await delay(100); }
     browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE || undefined,
       args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", `--use-file-for-fake-audio-capture=${wavPath}`, "--autoplay-policy=no-user-gesture-required"] });
     const pages = [];
     const errors = [];
-    for (const name of ["alice", "bob"]) {
+    const suffix = process.env.VOICE_TEST_URL ? `probe-${Date.now()}-` : "";
+    const names = [suffix + "alice", suffix + "bob"];
+    for (const name of names) {
       const context = await browser.newContext({ permissions: ["microphone"] });
-      await context.addInitScript(({ name, wsPort }) => {
+      await context.addInitScript(({ name, wsPort, remote }) => {
         localStorage.setItem("authToken", "synthetic-test-session");
         const NativeWS = window.WebSocket;
-        window.WebSocket = class extends NativeWS { constructor(url, ...args) { super(url.replace(/:\d+\/ws$/, `:${wsPort}`), ...args); } };
+        if (!remote) window.WebSocket = class extends NativeWS { constructor(url, ...args) { super(url.replace(/:\d+\/ws$/, `:${wsPort}`), ...args); } };
         window.testPCs = [];
         const PC = window.RTCPeerConnection;
         window.RTCPeerConnection = class extends PC { constructor(...args) { super(...args); window.testPCs.push(this); } };
-        if (name === "bob") {
+        if (name.endsWith("bob")) {
           const get = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
           navigator.mediaDevices.getUserMedia = async (...args) => { await new Promise((r) => setTimeout(r, 1500)); return get(...args); };
         }
-      }, { name, wsPort });
+      }, { name, wsPort, remote: Boolean(process.env.VOICE_TEST_URL) });
       await context.route("**/api/me", (route) => route.fulfill({ json: { username: name } }));
       if (process.env.DEBUG_TEST && !process.env.BASELINE_REF) await context.route("**/app.js", async (route) => {
         await route.fulfill({ contentType: "application/javascript", body: fs.readFileSync(path.join(root, "public/app.js"), "utf8").replace("const DEBUG_E2EE = false", "const DEBUG_E2EE = true") });
@@ -119,7 +121,7 @@ async function main() {
             peakHz: peak * ctx.sampleRate / analyser.fftSize, peakDb: bins[peak] });
           await ctx.close();
         }
-        return { live: live.length, summaries, playback, e2ee: window.E2EE.diagnostics?.() };
+        return { live: live.length, summaries, playback, e2ee: window.E2EE.diagnostics?.(), roomE2ee: window.E2EE.diagnostics?.("room") };
       })));
       console.log(label, JSON.stringify(results));
       assert.equal(errors.length, 0, errors.join("\n"));
@@ -135,6 +137,7 @@ async function main() {
     for (const page of pages) {
       await page.locator("#secret").fill("synthetic-room");
       await page.locator("#menu-voice").click();
+      if (await page.locator("#voice-room-name").count()) await page.locator("#voice-room-name").fill("synthetic-room");
       await page.locator("#voice-join").click();
     }
     await delay(5000); await report("room");
@@ -166,10 +169,25 @@ async function main() {
       console.log("floor-mute-ptt passed");
     }
     for (const page of pages) await page.locator("#voice-leave").click();
+    if (!process.env.BASELINE_REF) {
+      for (const page of pages) {
+        await page.locator("#voice-e2ee-toggle").check();
+        await page.locator("#voice-e2ee-secret").fill("synthetic-room-key");
+        await page.locator("#voice-join").click();
+        await page.waitForFunction(() => !document.querySelector("#voice-mute").disabled);
+        if (await page.locator("#voice-mute").textContent() === "Включить") await page.locator("#voice-mute").click();
+      }
+      await delay(5000); await report("room-e2ee");
+      for (const page of pages) {
+        const counters = await page.evaluate(() => E2EE.diagnostics("room"));
+        assert.ok(counters.encrypt >= 50 && counters.decrypt >= 50);
+        await page.locator("#voice-leave").click();
+      }
+    }
     for (const settings of (process.env.ONLY_E2EE ? [[true, true]] : [[false, false], [true, false], [false, true], [false, false]])) {
       const encrypted = settings.some(Boolean);
       for (let i = 0; i < pages.length; i++) { await pages[i].locator("#menu-calls").click(); await pages[i].locator("#e2ee-toggle").setChecked(settings[i]); }
-      await a.locator(".user-row").filter({ hasText: "bob" }).getByRole("button", { name: "Позвонить", exact: true }).click();
+      await a.locator(".user-row").filter({ hasText: names[1] }).getByRole("button", { name: "Позвонить", exact: true }).click();
       await b.locator("#call-accept").click();
       await delay(6000);
       if (encrypted) for (const page of pages) await page.locator("#e2ee-status").filter({ hasText: "E2EE включено" }).waitFor();
@@ -193,7 +211,10 @@ async function main() {
     await a.locator("#voice-join").click();
     assert.equal(await a.locator("#voice-floor-status").textContent(), "Общий микрофон: свободен");
     // Re-enable only by explicit action; never on the remote owner's departure.
-    await a.locator("#voice-mute").click(); await b.locator("#voice-mute").click();
+    for (const page of pages) {
+      await page.waitForFunction(() => !document.querySelector("#voice-mute").disabled);
+      if (await page.locator("#voice-mute").textContent() === "Включить") await page.locator("#voice-mute").click();
+    }
     await delay(5000); await report("room-after-reconnect");
     console.log("Browser voice checks passed (synthetic media; physical speakers not assessed).");
   } finally {

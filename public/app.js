@@ -50,6 +50,13 @@
   const voiceFloorStatus = document.getElementById("voice-floor-status");
   const voiceWarning = document.getElementById("voice-warning");
   const voiceSecretHint = document.getElementById("voice-secret-hint");
+  const voiceRoomNameEl = document.getElementById("voice-room-name");
+  const voiceE2eeToggle = document.getElementById("voice-e2ee-toggle");
+  const voiceE2eeSecretEl = document.getElementById("voice-e2ee-secret");
+  const voiceE2eeSecretField = document.getElementById("voice-e2ee-secret-field");
+  const voiceSecurityStatus = document.getElementById("voice-security-status");
+  const voiceVerification = document.getElementById("voice-verification");
+  const voiceVerificationCode = document.getElementById("voice-verification-code");
   const voiceParticipantsEl = document.getElementById("voice-participants");
   const voiceRemoteAudioEl = document.getElementById("voice-remote-audio");
   const dndToggle = document.getElementById("dnd-toggle");
@@ -128,6 +135,9 @@
     floorKnown: false,
     floorSuppressed: false,
     membershipId: null,
+    audioKey: null,
+    e2eeEnabled: false,
+    verificationCode: null,
   };
   let voiceLocalSpeaking = false;
 
@@ -186,9 +196,19 @@
     return raw;
   };
   const getSecret = () => secretEl.value.trim();
-  const getVoiceRoom = () => getSecret();
-  const hasVoiceSecret = () => Boolean(getVoiceRoom());
-  const getActiveVoiceRoom = () => voice.room || getVoiceRoom();
+  const getVoiceRoomName = () => VoiceRoomCrypto.normalize(voiceRoomNameEl.value);
+  const getVoiceSecret = () => VoiceRoomCrypto.normalize(voiceE2eeSecretEl.value);
+  const wantsVoiceE2ee = () => voiceE2eeToggle.checked;
+  const hasVoiceSettings = () =>
+    Boolean(getSecret() && getVoiceRoomName() && (!wantsVoiceE2ee() || getVoiceSecret()));
+  const getActiveVoiceRoom = () => voice.room;
+
+  const deriveVoiceRoom = async () =>
+    VoiceRoomCrypto.derive({
+      roomName: getVoiceRoomName(),
+      secret: getVoiceSecret(),
+      e2ee: wantsVoiceE2ee(),
+    });
 
   const connect = () => {
     if (!hasNickname()) return;
@@ -783,10 +803,14 @@
     ws.send(JSON.stringify(payload));
   };
 
-  const sendVoiceWho = () => {
-    const room = getVoiceRoom();
-    if (!room) return;
-    sendSignal({ type: "voice:who", room });
+  const sendVoiceWho = async () => {
+    if (!hasVoiceSettings()) return;
+    try {
+      const config = await deriveVoiceRoom();
+      sendSignal({ type: "voice:who", room: config.roomId });
+    } catch (err) {
+      console.warn("[voice] room derivation failed:", err);
+    }
   };
 
   const hasVoiceFloor = () => Boolean(voice.floorOwner);
@@ -804,17 +828,38 @@
   };
 
   const updateVoiceUI = () => {
-    const hasSecret = hasVoiceSecret();
+    const hasSettings = hasVoiceSettings();
+    const e2eeSupported = Boolean(E2EE.supports);
     const floorMine = voice.floorOwner && voice.floorOwner === getNickname();
     const floorBusy = hasVoiceFloor();
     voiceJoinBtn.classList.toggle("hidden", voice.joined);
     voiceLeaveBtn.classList.toggle("hidden", !voice.joined);
-    voiceJoinBtn.disabled = voice.joining || !hasSecret || !ws || ws.readyState !== WebSocket.OPEN;
+    voiceJoinBtn.disabled = voice.joining || !hasSettings || (wantsVoiceE2ee() && !e2eeSupported) || !ws || ws.readyState !== WebSocket.OPEN;
     voiceLeaveBtn.disabled = !voice.joined;
     voiceMuteBtn.disabled = !voice.joined || !canSpeakInVoice();
     voicePttBtn.disabled = !voice.joined || !voice.floorKnown || (floorBusy && !floorMine);
     voiceFloorBtn.disabled = !voice.joined || !voice.floorKnown || (floorBusy && !floorMine);
-    voiceSecretHint.classList.toggle("hidden", hasSecret);
+    voiceSecretHint.classList.toggle("hidden", hasSettings);
+    voiceSecretHint.textContent = !getSecret()
+      ? "Сначала укажите «Секрет сообщений» в верхней части страницы."
+      : wantsVoiceE2ee()
+        ? "Укажите название комнаты и общий секрет шифрования."
+        : "Укажите название голосовой комнаты.";
+    voiceE2eeSecretField.classList.toggle("hidden", !wantsVoiceE2ee());
+    voiceRoomNameEl.disabled = voice.joined || voice.joining;
+    voiceE2eeToggle.disabled = voice.joined || voice.joining;
+    voiceE2eeSecretEl.disabled = voice.joined || voice.joining;
+    if (voice.joined && voice.e2eeEnabled) {
+      voiceSecurityStatus.textContent = "E2EE включено: звук шифруется до отправки";
+    } else if (wantsVoiceE2ee() && !e2eeSupported) {
+      voiceSecurityStatus.textContent = "E2EE не поддерживается этим браузером";
+    } else if (wantsVoiceE2ee()) {
+      voiceSecurityStatus.textContent = "E2EE включится при входе";
+    } else {
+      voiceSecurityStatus.textContent = "E2EE выключено (только DTLS-SRTP)";
+    }
+    voiceVerification.classList.toggle("hidden", !voice.joined || !voice.verificationCode);
+    voiceVerificationCode.textContent = voice.verificationCode || "";
     voiceMuteBtn.textContent = effectiveVoiceMuted() ? "Включить" : "Выключить";
     voiceFloorBtn.textContent = floorMine ? "Отпустить микрофон" : "Забрать микрофон";
     voiceMicStatus.textContent = voice.joined
@@ -963,6 +1008,16 @@
           renderVoiceParticipants();
         });
       },
+      onSender: (sender) => {
+        if (voice.e2eeEnabled && voice.audioKey && sender.track && sender.track.kind === "audio") {
+          E2EE.attachSenderTransform(sender, voice.audioKey, "room");
+        }
+      },
+      onReceiver: (receiver) => {
+        if (voice.e2eeEnabled && voice.audioKey && receiver.track && receiver.track.kind === "audio") {
+          E2EE.attachReceiverTransform(receiver, voice.audioKey, "room");
+        }
+      },
     });
     if (voice.localStream) {
       connection.addLocalStream(voice.localStream);
@@ -994,17 +1049,23 @@
   const joinVoice = async () => {
     setVoiceWarning(false);
     if (voice.joined || voice.joining) return;
-    const room = getVoiceRoom();
-    if (!room) {
+    if (!hasVoiceSettings()) {
       updateVoiceUI();
       const now = Date.now();
       if (now - lastVoiceSecretNoticeAt > 4000) {
         lastVoiceSecretNoticeAt = now;
         renderMessage({
           kind: "system",
-          body: "Для голосового чата заполните поле «Секрет» одинаковым кодовым словом.",
+          body: wantsVoiceE2ee()
+            ? "Укажите название голосовой комнаты и общий секрет E2EE."
+            : "Укажите название голосовой комнаты.",
         });
       }
+      return;
+    }
+    if (wantsVoiceE2ee() && !E2EE.supports) {
+      renderMessage({ kind: "system", body: "Этот браузер не поддерживает E2EE для WebRTC-аудио." });
+      updateVoiceUI();
       return;
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -1018,10 +1079,16 @@
     voice.joining = true;
     updateVoiceUI();
     try {
-      voice.room = room;
       const socket = ws;
+      const settings = JSON.stringify([getVoiceRoomName(), getVoiceSecret(), wantsVoiceE2ee()]);
+      const config = await deriveVoiceRoom();
+      voice.room = config.roomId;
+      voice.audioKey = config.audioKey;
+      voice.e2eeEnabled = wantsVoiceE2ee();
+      voice.verificationCode = config.verificationCode;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      if (socket !== ws || ws.readyState !== WebSocket.OPEN || getVoiceRoom() !== room) {
+      if (socket !== ws || ws.readyState !== WebSocket.OPEN ||
+          JSON.stringify([getVoiceRoomName(), getVoiceSecret(), wantsVoiceE2ee()]) !== settings) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -1090,6 +1157,10 @@
     voice.membershipId = null;
     voiceLocalSpeaking = false;
     voice.room = null;
+    E2EE.reset("room");
+    voice.audioKey = null;
+    voice.e2eeEnabled = false;
+    voice.verificationCode = null;
     voice.floorOwner = null;
     voice.pttActive = false;
     stopSpeakingMonitor("local");
@@ -1858,7 +1929,12 @@
     enableE2EETransforms();
   };
 
-  window.addEventListener("e2ee-error", () => {
+  window.addEventListener("e2ee-error", (event) => {
+    if (event.detail?.scope === "room") {
+      renderMessage({ kind: "system", body: "Ошибка шифрования комнаты. Голос отключён; войдите заново." });
+      leaveVoice();
+      return;
+    }
     if (!call.e2eeEnabled) return;
     renderMessage({ kind: "system", body: "Ошибка шифрования аудио. Звонок завершён; повторите вызов." });
     hangupCall();
@@ -2675,33 +2751,34 @@
   };
 
   const handleSecretChange = () => {
-    const previousRoom = voice.room;
     lockEncryptedMessages();
     if (getSecret()) {
       tryDecryptStoredMessages();
-    }
-    updateVoiceUI();
-    if (voice.joined && previousRoom && previousRoom !== getVoiceRoom()) {
+    } else if (voice.joined) {
       leaveVoice();
     }
-    if (!voice.joined && previousRoom !== getVoiceRoom()) {
-      voice.roster.clear();
-      renderVoiceParticipants();
-      setVoiceWarning(false);
-    }
-    if (menuVoiceBtn.classList.contains("active")) {
+    updateVoiceUI();
+    if (!voice.joined && menuVoiceBtn.classList.contains("active")) {
       sendVoiceWho();
     }
   };
 
   secretEl.addEventListener("input", handleSecretChange);
-  secretEl.addEventListener("focus", () => {
-    if (secretEl.value) {
-      secretEl.value = "";
-      lockEncryptedMessages();
-      updateVoiceUI();
+
+  const handleVoiceSettingsChange = () => {
+    if (voice.joined) return;
+    voice.roster.clear();
+    renderVoiceParticipants();
+    setVoiceWarning(false);
+    updateVoiceUI();
+    if (menuVoiceBtn.classList.contains("active")) {
+      sendVoiceWho();
     }
-  });
+  };
+
+  voiceRoomNameEl.addEventListener("input", handleVoiceSettingsChange);
+  voiceE2eeSecretEl.addEventListener("input", handleVoiceSettingsChange);
+  voiceE2eeToggle.addEventListener("change", handleVoiceSettingsChange);
 
   const setMainTab = (tab) => {
     menuChatBtn.classList.toggle("active", tab === "chat");

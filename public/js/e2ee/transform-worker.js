@@ -3,31 +3,28 @@ const MAGIC = new Uint8Array([0x45, 0x32, 0x45, 0x45]); // "E2EE"
 const importKey = async (raw) =>
   crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 
+// Preserve and authenticate the Opus TOC byte required by the RTP packetizer.
+// Audio content remains AES-GCM encrypted; plaintext is never accepted.
 const encryptFrame = async (frame, key) => {
+  const data = new Uint8Array(frame.data);
+  if (!data.length) throw new Error("Empty audio frame");
+  const header = data.slice(0, 1);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, frame.data);
-  const encrypted = new Uint8Array(MAGIC.byteLength + iv.byteLength + ciphertext.byteLength);
-  encrypted.set(MAGIC, 0);
-  encrypted.set(iv, MAGIC.byteLength);
-  encrypted.set(new Uint8Array(ciphertext), MAGIC.byteLength + iv.byteLength);
-  frame.data = encrypted.buffer;
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: header }, key, data.slice(1));
+  const output = new Uint8Array(1 + MAGIC.length + iv.length + encrypted.byteLength);
+  output.set(header); output.set(MAGIC, 1); output.set(iv, 5); output.set(new Uint8Array(encrypted), 17);
+  frame.data = output.buffer;
   return frame;
 };
 
 const decryptFrame = async (frame, key) => {
   const data = new Uint8Array(frame.data);
-  if (data.byteLength <= MAGIC.byteLength + 12) {
-    throw new Error("Unencrypted E2EE frame");
-  }
-  for (let i = 0; i < MAGIC.byteLength; i += 1) {
-    if (data[i] !== MAGIC[i]) {
-      throw new Error("Unencrypted E2EE frame");
-    }
-  }
-  const iv = data.slice(MAGIC.byteLength, MAGIC.byteLength + 12);
-  const ciphertext = data.slice(MAGIC.byteLength + 12);
-  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-  frame.data = plaintext;
+  if (data.length < 33 || !MAGIC.every((byte, i) => data[i + 1] === byte)) throw new Error("Unencrypted E2EE frame");
+  const header = data.slice(0, 1);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: data.slice(5, 17), additionalData: header }, key, data.slice(17));
+  const output = new Uint8Array(1 + decrypted.byteLength);
+  output.set(header); output.set(new Uint8Array(decrypted), 1);
+  frame.data = output.buffer;
   return frame;
 };
 

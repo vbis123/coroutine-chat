@@ -80,7 +80,7 @@
             <input id="recipient" type="text" maxlength="24" placeholder="всем" list="nicknames" />
           </label>
           <label class="field">
-            <span>Секрет (опционально)</span>
+            <span>Секрет сообщений (опционально)</span>
             <input
               id="secret"
               type="password"
@@ -135,8 +135,26 @@
         <section class="panel-section hidden" id="panel-voice" role="tabpanel">
           <section class="voice-panel">
             <div class="panel-title">Голос</div>
+            <div class="voice-room-settings">
+              <label class="field">
+                <span>Название комнаты</span>
+                <input id="voice-room-name" type="text" maxlength="64" placeholder="например, команда" autocomplete="off" />
+              </label>
+              <label class="toggle">
+                <input id="voice-e2ee-toggle" type="checkbox" />
+                <span>Сквозное шифрование голоса (E2EE)</span>
+              </label>
+              <label class="field" id="voice-e2ee-secret-field">
+                <span>Секрет шифрования</span>
+                <input id="voice-e2ee-secret" type="password" maxlength="128" placeholder="общая секретная фраза" autocomplete="new-password" autocapitalize="off" spellcheck="false" />
+              </label>
+            </div>
             <div class="voice-secret-hint hidden" id="voice-secret-hint">
-              Для голосового чата заполните поле «Секрет» одинаковым кодовым словом.
+              Укажите название комнаты и общий секрет шифрования.
+            </div>
+            <div class="voice-security" id="voice-security-status">E2EE: готово к настройке</div>
+            <div class="voice-verification hidden" id="voice-verification">
+              Код сверки: <strong id="voice-verification-code"></strong>
             </div>
             <div class="voice-controls">
               <button id="voice-join" type="button">Войти в голос</button>
@@ -221,6 +239,7 @@
     <script src="/js/audio_alerts.js"></script>
     <script src="/js/call_fsm.js"></script>
     <script src="/js/crypto/key-exchange.js"></script>
+    <script src="/js/crypto/voice-room.js"></script>
     <script src="/js/e2ee/e2ee.js"></script>
     <script src="/js/webrtc_call.js"></script>
     <script src="/js/remote_audio.js"></script>

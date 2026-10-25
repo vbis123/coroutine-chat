@@ -15,6 +15,7 @@ const requiredFiles = [
   "public/js/call_fsm.js",
   "public/js/webrtc_call.js",
   "public/js/crypto/key-exchange.js",
+  "public/js/crypto/voice-room.js",
   "public/js/e2ee/e2ee.js",
   "public/js/e2ee/transform-worker.js",
 ];
@@ -100,6 +101,7 @@ checkContains("proxy/server.js", "/config.js", "proxy serves /config.js");
 checkContains("proxy/server.js", "Cache-Control\", \"no-store\"", "proxy disables cache for static html/js/css");
 checkContains("public/index.html", "/js/audio_alerts.js", "index loads audio_alerts.js");
 checkContains("public/index.html", "/js/e2ee/e2ee.js", "index loads e2ee.js");
+checkContains("public/index.html", "/js/crypto/voice-room.js", "index loads voice-room crypto");
 checkContains("public/app.js", "handleSignal", "client has handleSignal");
 checkContains("public/app.js", "CallFSM.create", "client uses call FSM");
 

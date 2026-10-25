@@ -644,6 +644,22 @@ wss.on("connection", (ws, req) => {
           if (!parsed.payload.sdp) return;
         }
         if (type === "webrtc:ice" && !parsed.payload.candidate) return;
+        if (type.startsWith("webrtc:") && !parsed.payload.callId) {
+          const recipientInfo = clientInfo.get(clientsById.get(to));
+          const roster = voiceRooms.get(room);
+          if (
+            !info.voice ||
+            info.room !== room ||
+            !recipientInfo ||
+            !recipientInfo.voice ||
+            recipientInfo.room !== room ||
+            !roster ||
+            !roster.has(from) ||
+            !roster.has(to)
+          ) {
+            return;
+          }
+        }
         if (type.startsWith("e2ee:") && !parsed.payload.callId) return;
         const payloadSize = JSON.stringify(parsed.payload || {}).length;
         if (type.startsWith("e2ee:") && payloadSize > 8 * 1024) {

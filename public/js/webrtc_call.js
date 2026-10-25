@@ -40,12 +40,8 @@
     };
 
     pc.ontrack = (event) => {
-      if (handlers.onTrack) {
-        handlers.onTrack(event.streams[0] || new MediaStream([event.track]), event);
-      }
-      if (handlers.onReceiver) {
-        handlers.onReceiver(event.receiver);
-      }
+      if (handlers.onReceiver) handlers.onReceiver(event.receiver);
+      if (handlers.onTrack) handlers.onTrack(event.streams[0] || new MediaStream([event.track]), event);
     };
 
     pc.onconnectionstatechange = () => {
