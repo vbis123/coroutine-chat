@@ -35,6 +35,7 @@
   const logoutModal = document.getElementById("logout-modal");
   const logoutCancel = document.getElementById("logout-cancel");
   const logoutConfirm = document.getElementById("logout-confirm");
+  const mainNavigation = document.getElementById("main-navigation");
   const menuChatBtn = document.getElementById("menu-chat");
   const menuVoiceBtn = document.getElementById("menu-voice");
   const menuCallsBtn = document.getElementById("menu-calls");
@@ -2596,6 +2597,7 @@
     nicknameEl.value = username;
     authPanel.classList.add("hidden");
     chatPanel.classList.remove("hidden");
+    mainNavigation.classList.remove("hidden");
     connectBtn.textContent = "Подключиться";
     logoutBtn.classList.remove("hidden");
     setStatus("disconnected");
@@ -2608,6 +2610,7 @@
   const showAuth = () => {
     authPanel.classList.remove("hidden");
     chatPanel.classList.add("hidden");
+    mainNavigation.classList.add("hidden");
     logoutBtn.classList.add("hidden");
     nicknameEl.value = "";
     setStatus("disconnected");

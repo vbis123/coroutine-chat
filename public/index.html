@@ -3,19 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TCP Broadcast Chat</title>
+    <title>Чат</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <main class="app">
       <header class="header">
-        <div>
-          <h1>Чат трансляции</h1>
-          <p class="sub">TCP сервер через WebSocket proxy</p>
-        </div>
         <div class="header-actions">
           <div class="status" id="status">Отключено</div>
           <button class="logout hidden" id="logout-btn" type="button">Выйти</button>
+        </div>
+        <div class="menu-tabs hidden" id="main-navigation" role="tablist" aria-label="Разделы общения">
+          <button class="menu-tab active" type="button" id="menu-chat" role="tab" aria-controls="panel-chat">
+            Чат
+          </button>
+          <button class="menu-tab" type="button" id="menu-voice" role="tab" aria-controls="panel-voice">
+            Голосовой чат
+          </button>
+          <button class="menu-tab" type="button" id="menu-calls" role="tab" aria-controls="panel-calls">
+            Звонки
+          </button>
         </div>
       </header>
 
@@ -92,17 +99,6 @@
               spellcheck="false"
             />
           </label>
-        </div>
-        <div class="menu-tabs" role="tablist" aria-label="Разделы общения">
-          <button class="menu-tab active" type="button" id="menu-chat" role="tab" aria-controls="panel-chat">
-            Чат
-          </button>
-          <button class="menu-tab" type="button" id="menu-voice" role="tab" aria-controls="panel-voice">
-            Голосовой чат
-          </button>
-          <button class="menu-tab" type="button" id="menu-calls" role="tab" aria-controls="panel-calls">
-            Звонки
-          </button>
         </div>
 
         <section class="panel-section" id="panel-chat" role="tabpanel">
