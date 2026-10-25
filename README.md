@@ -24,7 +24,7 @@
 1. Установить зависимости:
 
 ```bash
-npm install
+npm ci
 ```
 
 2. Запустить C++ TCP сервер отдельно.
@@ -126,10 +126,13 @@ TURN_PASS=turnpass
    - Block → входящие отклоняются с reason `blocked`.
 3) **E2EE**:
    - включить `E2EE (extra)` в обеих вкладках → статус `E2EE enabled`, звук работает;
-   - если браузер не поддерживает — fallback на `Transport encrypted`.
+   - если запрошенное E2EE не поддерживается или не согласовано — звонок завершается, автоматического fallback нет.
 
 ## Smoke-test (env checks)
-Скрипт `npm test` проверяет наличие ключевых файлов и конфигурации.
+`npm test` выполняет поведенческие Node-тесты, интеграционный тест proxy и smoke-проверки файлов/окружения.
+
+Подробные результаты расследования, браузерные тесты, проверка TURN и порядок обновления/отката:
+[Диагностика голоса](docs/voice-diagnostics.md).
 
 Переменные для расширенных проверок:
 - `SMOKE_STRICT=1` — считать предупреждения ошибками.
@@ -163,3 +166,9 @@ SMOKE_CHECK_WS=1 SMOKE_CHECK_WS_HANDSHAKE=1 npm test
 - `CERT_PATH`, `KEY_PATH` (HTTPS режим)
 - `TURN_URL`, `TURN_USER`, `TURN_PASS`
 - `VOICE_LIMIT`
+
+Конфигурация загружается единственным запросом `/config.json` до создания WebRTC.
+`TURN_SECRET` включает временные REST credentials и имеет приоритет над статическими.
+`ICE_TRANSPORT_POLICY=relay` позволяет проверить TURN на staging; обычно используйте `all`.
+На Windows переменные задаются через `$env:TCP_HOST="127.0.0.1"`; запуск — `npm.cmd start`.
+Same-origin `/ws` поддерживается и в локальном HTTP режиме.

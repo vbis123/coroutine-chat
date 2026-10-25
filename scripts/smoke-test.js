@@ -57,7 +57,7 @@ const checkEnv = () => {
   const turnUrl = process.env.TURN_URL;
   const turnUser = process.env.TURN_USER;
   const turnPass = process.env.TURN_PASS;
-  if (turnUrl) {
+  if (turnUrl && !process.env.TURN_SECRET) {
     checks.push({ ok: Boolean(turnUser), label: "TURN_USER is set when TURN_URL is set" });
     checks.push({ ok: Boolean(turnPass), label: "TURN_PASS is set when TURN_URL is set" });
   }
@@ -83,7 +83,7 @@ const checkEnv = () => {
     checks.push({ ok, label: "HTTP_PORT is a valid port" });
   }
 
-  if (!turnUrl) {
+  if (!turnUrl && !process.env.TURN_SECRET) {
     warn("TURN_URL not set (TURN optional for NAT traversal).");
   }
   if (!certPath && !keyPath) {

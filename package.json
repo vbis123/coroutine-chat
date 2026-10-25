@@ -9,7 +9,8 @@
     "dev": "node --watch proxy/server.js",
     "test": "npm run test:unit && node scripts/smoke-test.js",
     "test:unit": "node --test test/*.test.js",
-    "check": "npm test"
+    "check": "npm test",
+    "test:browser": "node scripts/browser-voice-test.js"
   },
   "dependencies": {
     "express": "^4.19.2",

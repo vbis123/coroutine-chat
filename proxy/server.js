@@ -13,47 +13,27 @@ const CERT_PATH = process.env.CERT_PATH;
 const KEY_PATH = process.env.KEY_PATH;
 const TCP_HOST = process.env.TCP_HOST || "127.0.0.1";
 const TCP_PORT = Number(process.env.TCP_PORT || 9000);
+const WS_HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS || 15000);
+if (!Number.isFinite(WS_HEARTBEAT_MS) || WS_HEARTBEAT_MS < 50) throw new Error("Invalid WS_HEARTBEAT_MS");
 
 const MAX_PAYLOAD = 12 * 1024 * 1024; // 12MB
 const MAX_WS_QUEUE = 16 * 1024 * 1024; // 16MB
 const WS_BACKPRESSURE_HIGH = 2 * 1024 * 1024;
 const WS_BACKPRESSURE_LOW = 512 * 1024;
-const DATA_DIR = path.join(__dirname, "..", "data");
+const DATA_DIR = process.env.CHAT_DATA_DIR || path.join(__dirname, "..", "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 100000;
 const PASSWORD_MIN_LENGTH = 8;
 
-const app = express();// --- TURN REST config endpoint ---
-
-function buildTurnConfig() {
-  const secret = process.env.TURN_SECRET || "";
-  if (!secret) return null;
-
-  // TTL для кредов (сек). Обычно 1-6 часов.
-  const ttlSeconds = 6 * 60 * 60;
-  const username = `${Math.floor(Date.now() / 1000) + ttlSeconds}:coroutine-chat`;
-  const credential = crypto.createHmac("sha1", secret).update(username).digest("base64");
-
-  return {
-    urls: [
-      "turn:coroutine-chat.ru:3478?transport=udp",
-      "turn:coroutine-chat.ru:3478?transport=tcp",
-      "turns:coroutine-chat.ru:5349?transport=tcp",
-    ],
-    username,
-    credential,
-  };
-}
-
-// Вернём весь __APP_CONFIG__ как JSON
+const { buildConfig } = require("./config");
+const app = express();
+// Fail before listening for invalid deployment settings.
+buildConfig();
 app.get("/config.json", (req, res) => {
-  const turn = buildTurnConfig();
   res.setHeader("Cache-Control", "no-store");
-  res.json({
-    turn, // если secret не задан, будет null
-  });
+  res.json(buildConfig());
 });
 
 app.use(express.json());
@@ -70,16 +50,8 @@ app.use(
 
 app.get("/config.js", (req, res) => {
   res.type("application/javascript");
-  const config = {
-    turn: process.env.TURN_URL
-      ? {
-          urls: process.env.TURN_URL,
-          username: process.env.TURN_USER || "",
-          credential: process.env.TURN_PASS || "",
-        }
-      : null,
-    voiceLimit: Number(process.env.VOICE_LIMIT || 6),
-  };
+  res.setHeader("Cache-Control", "no-store");
+  const config = buildConfig();
   res.send(`window.__APP_CONFIG__ = ${JSON.stringify(config)};`);
 });
 
@@ -240,6 +212,13 @@ httpServer.listen(HTTP_PORT, () => {
 const wss = isHttps
   ? new WebSocket.Server({ server: httpServer, maxPayload: MAX_PAYLOAD })
   : new WebSocket.Server({ port: WS_PORT, maxPayload: MAX_PAYLOAD });
+// The browser uses same-origin /ws in local HTTP mode as well as behind nginx.
+if (!isHttps) {
+  httpServer.on("upgrade", (req, socket, head) => {
+    if (req.url !== "/ws") { socket.destroy(); return; }
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  });
+}
 if (isHttps) {
   console.log(`[ws] listening on wss://localhost:${HTTP_PORT}`);
 } else {
@@ -288,6 +267,10 @@ const ensureRoom = (room) => {
 
 const sendJson = (ws, payload) => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (payload.type?.startsWith("voice:") ||
+      (payload.type?.startsWith("webrtc:") && !payload.payload?.callId)) {
+    payload = { ...payload, membershipId: clientInfo.get(ws)?.membershipId };
+  }
   ws.send(JSON.stringify(payload));
 };
 
@@ -359,6 +342,15 @@ wss.on("connection", (ws, req) => {
     voice: false,
   };
   clientInfo.set(ws, info);
+  let alive = true;
+  ws.on("pong", () => { alive = true; });
+  const heartbeatTimer = setInterval(() => {
+    if (!alive) { ws.terminate(); return; }
+    alive = false;
+    ws.ping();
+  }, WS_HEARTBEAT_MS);
+  heartbeatTimer.unref();
+  ws.once("close", () => clearInterval(heartbeatTimer));
   let tcpBuffer = Buffer.alloc(0);
   let wsQueue = [];
   let wsQueueBytes = 0;
@@ -507,7 +499,18 @@ wss.on("connection", (ws, req) => {
         return;
       }
 
+      const roomSignal = type.startsWith("voice:") ||
+        (type.startsWith("webrtc:") && !parsed.payload?.callId);
+      if (roomSignal && !["voice:join", "voice:who"].includes(type) &&
+          (!info.voice || info.room !== room || parsed.membershipId !== info.membershipId)) return;
+
       if (type === "voice:join") {
+        if (info.voice || typeof parsed.payload?.membershipId !== "string") return;
+        info.membershipId = parsed.payload.membershipId;
+        if (ensureRoom(room).size >= buildConfig().voiceLimit) {
+          sendJson(ws, { type: "voice:state", room, payload: { full: true } });
+          return;
+        }
         const roster = ensureRoom(room);
         roster.set(from, {
           muted: Boolean(parsed.payload && parsed.payload.muted),
@@ -557,8 +560,9 @@ wss.on("connection", (ws, req) => {
         const roster = voiceRooms.get(room);
         if (!roster || !roster.has(from)) return;
         const state = roster.get(from);
-        state.muted = Boolean(parsed.payload && parsed.payload.muted);
-        state.speaking = Boolean(parsed.payload && parsed.payload.speaking);
+        const blocked = voiceFloorOwners.has(room) && voiceFloorOwners.get(room) !== from;
+        state.muted = blocked || Boolean(parsed.payload && parsed.payload.muted);
+        state.speaking = !state.muted && Boolean(parsed.payload && parsed.payload.speaking);
         broadcastRoom(room, { type: "voice:state", room, from, payload: state }, from);
         return;
       }
@@ -566,9 +570,11 @@ wss.on("connection", (ws, req) => {
       if (type === "voice:floor:take") {
         const roster = voiceRooms.get(room);
         if (!roster || !roster.has(from)) return;
-        if (voiceFloorOwners.get(room)) return;
-        voiceFloorOwners.set(room, from);
-        const payload = { participants: getVoiceParticipants(room), floorOwner: from };
+        if (!voiceFloorOwners.get(room)) voiceFloorOwners.set(room, from);
+        for (const [id, state] of roster) {
+          if (id !== voiceFloorOwners.get(room)) { state.muted = true; state.speaking = false; }
+        }
+        const payload = { participants: getVoiceParticipants(room), floorOwner: voiceFloorOwners.get(room) || null };
         sendJson(ws, { type: "voice:state", room, from: "server", payload });
         broadcastRoom(room, { type: "voice:state", room, from: "server", payload }, from);
         return;
@@ -577,9 +583,8 @@ wss.on("connection", (ws, req) => {
       if (type === "voice:floor:release") {
         const roster = voiceRooms.get(room);
         if (!roster || !roster.has(from)) return;
-        if (voiceFloorOwners.get(room) !== from) return;
-        voiceFloorOwners.delete(room);
-        const payload = { participants: getVoiceParticipants(room), floorOwner: null };
+        if (voiceFloorOwners.get(room) === from) voiceFloorOwners.delete(room);
+        const payload = { participants: getVoiceParticipants(room), floorOwner: voiceFloorOwners.get(room) || null };
         sendJson(ws, { type: "voice:state", room, from: "server", payload });
         broadcastRoom(room, { type: "voice:state", room, from: "server", payload }, from);
         return;
@@ -630,6 +635,10 @@ wss.on("connection", (ws, req) => {
 
       if (type.startsWith("webrtc:") || type.startsWith("e2ee:")) {
         if (!to || !clientsById.has(to)) return;
+        if (roomSignal) {
+          const target = clientInfo.get(clientsById.get(to));
+          if (!target?.voice || target.room !== room) return;
+        }
         if (!parsed.payload) return;
         if (type === "webrtc:offer" || type === "webrtc:answer") {
           if (!parsed.payload.sdp) return;
@@ -650,6 +659,12 @@ wss.on("connection", (ws, req) => {
     if (!info.id && text && text[0] !== "{") {
       info.id = text.trim();
       if (info.id) {
+        const previous = clientsById.get(info.id);
+        if (previous && previous !== ws) {
+          // Wait for the old membership to close before this identity can rejoin.
+          closeBoth("identity already connected", 1008);
+          return;
+        }
         clientsById.set(info.id, ws);
       }
     }
@@ -696,6 +711,7 @@ wss.on("connection", (ws, req) => {
   ws.once("close", () => {
     const wsInfo = clientInfo.get(ws);
     if (!wsInfo || !wsInfo.id) return;
+    if (clientsById.get(wsInfo.id) !== ws) return;
     clientsById.delete(wsInfo.id);
     if (wsInfo.voice) {
       const roster = voiceRooms.get(wsInfo.room);

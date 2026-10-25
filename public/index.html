@@ -216,25 +216,14 @@
         </div>
       </div>
     </div>
-<script>
-(async () => {
-  try {
-    const r = await fetch("/config.json", { cache: "no-store" });
-    window.__APP_CONFIG__ = await r.json();
-    console.log("[config] loaded", window.__APP_CONFIG__);
-  } catch (e) {
-    window.__APP_CONFIG__ = window.__APP_CONFIG__ || { turn: null, voiceLimit: 6 };
-    console.warn("[config] failed, using fallback", e);
-  }
-})();
-</script>
-
-    <script src="/config.js"></script>
+    <script src="/js/config.js"></script>
     <script src="/js/protocol/signaling.js"></script>
     <script src="/js/audio_alerts.js"></script>
     <script src="/js/call_fsm.js"></script>
     <script src="/js/crypto/key-exchange.js"></script>
     <script src="/js/e2ee/e2ee.js"></script>
     <script src="/js/webrtc_call.js"></script>
+    <script src="/js/remote_audio.js"></script>
+    <script src="/js/voice_state.js"></script>
     <script src="/app.js"></script>
   </body>

@@ -97,16 +97,8 @@
   const FILE_DEDUP_LIMIT = 200;
   const ACK_PREFIX = "::ack::";
   const ACK_TIMEOUT_MS = 30000;
-  const loadAppConfig = async () => {
-    if (window.__APP_CONFIG__) return window.__APP_CONFIG__;
-    try {
-      const r = await fetch("/config.json", { cache: "no-store" });
-      if (r.ok) window.__APP_CONFIG__ = await r.json();
-    } catch (_) {}
-    return window.__APP_CONFIG__ || {};
-  };
-
-  const appConfig = await loadAppConfig();
+  let appConfig;
+  try { appConfig = await window.appConfigReady; } catch (_) { return; }
   const VOICE_LIMIT = Number(appConfig.voiceLimit || 6);
   const CALL_TIMEOUT_MS = 30000;
   const DEBUG_E2EE = false;
@@ -120,6 +112,7 @@
 
 
   const voice = {
+    joining: false,
     joined: false,
     muted: false,
     localStream: null,
@@ -129,9 +122,12 @@
     analyserTimers: new Map(),
     remoteAudioEls: new Map(),
     pttActive: false,
-    pttRestoreMuted: true,
     audioCtx: null,
     floorOwner: null,
+    floorStateTimer: null,
+    floorKnown: false,
+    floorSuppressed: false,
+    membershipId: null,
   };
   let voiceLocalSpeaking = false;
 
@@ -139,6 +135,8 @@
     fsm: null,
     connection: null,
     localStream: null,
+    muted: false,
+    e2eeKeyPairPromise: null,
     remoteStream: null,
     localAnalyser: null,
     analyserTimer: null,
@@ -216,7 +214,10 @@
       const text = typeof event.data === "string" ? event.data : "";
       const signal = window.Signaling ? window.Signaling.parseSignal(text) : null;
       if (signal) {
-        handleSignal(signal);
+        handleSignal(signal).catch(() => {
+          console.warn("[voice] signaling operation failed");
+          renderMessage({ kind: "system", body: "Ошибка согласования аудио. Завершите и повторите соединение." });
+        });
         return;
       }
       handleIncoming(text);
@@ -777,6 +778,7 @@
     if (isVoiceSignal(message)) {
       const room = message.room || getActiveVoiceRoom();
       if (room) payload.room = room;
+      payload.membershipId = voice.membershipId;
     }
     ws.send(JSON.stringify(payload));
   };
@@ -788,12 +790,14 @@
   };
 
   const hasVoiceFloor = () => Boolean(voice.floorOwner);
-  const canSpeakInVoice = () => !voice.floorOwner || voice.floorOwner === getNickname();
-  const effectiveVoiceMuted = () => voice.muted || !canSpeakInVoice();
+  const canSpeakInVoice = () => VoiceState.canSpeak(voice, getNickname());
+  const effectiveVoiceMuted = () => VoiceState.muted(voice, getNickname());
 
   const applyVoiceTrackState = () => {
     if (!voice.localStream) return;
     const enabled = !effectiveVoiceMuted();
+    const state = voice.roster.get(getNickname()) || {};
+    voice.roster.set(getNickname(), { ...state, muted: !enabled, speaking: enabled && voiceLocalSpeaking });
     voice.localStream.getAudioTracks().forEach((track) => {
       track.enabled = enabled;
     });
@@ -805,18 +809,18 @@
     const floorBusy = hasVoiceFloor();
     voiceJoinBtn.classList.toggle("hidden", voice.joined);
     voiceLeaveBtn.classList.toggle("hidden", !voice.joined);
-    voiceJoinBtn.disabled = !hasSecret || !ws || ws.readyState !== WebSocket.OPEN;
+    voiceJoinBtn.disabled = voice.joining || !hasSecret || !ws || ws.readyState !== WebSocket.OPEN;
     voiceLeaveBtn.disabled = !voice.joined;
-    voiceMuteBtn.disabled = !voice.joined || (floorBusy && !floorMine);
-    voicePttBtn.disabled = !voice.joined || (floorBusy && !floorMine);
-    voiceFloorBtn.disabled = !voice.joined || (floorBusy && !floorMine);
+    voiceMuteBtn.disabled = !voice.joined || !canSpeakInVoice();
+    voicePttBtn.disabled = !voice.joined || !voice.floorKnown || (floorBusy && !floorMine);
+    voiceFloorBtn.disabled = !voice.joined || !voice.floorKnown || (floorBusy && !floorMine);
     voiceSecretHint.classList.toggle("hidden", hasSecret);
-    voiceMuteBtn.textContent = voice.muted ? "Включить" : "Выключить";
+    voiceMuteBtn.textContent = effectiveVoiceMuted() ? "Включить" : "Выключить";
     voiceFloorBtn.textContent = floorMine ? "Отпустить микрофон" : "Забрать микрофон";
     voiceMicStatus.textContent = voice.joined
       ? `Микрофон: ${effectiveVoiceMuted() ? "мут" : "живой"}`
       : "Микрофон: выкл";
-    voiceFloorStatus.textContent = hasVoiceFloor()
+    voiceFloorStatus.textContent = voice.joined && !voice.floorKnown ? "Получаем состояние комнаты…" : hasVoiceFloor()
       ? `Общий микрофон удерживает: ${voice.floorOwner}`
       : "Общий микрофон: свободен";
     voiceFloorStatus.classList.toggle("busy", floorBusy);
@@ -903,12 +907,14 @@
     }
     if (audio.srcObject !== stream) {
       audio.srcObject = stream;
+      RemoteAudio.play(audio);
     }
   };
 
   const detachVoiceAudio = (peerId) => {
     const audio = voice.remoteAudioEls.get(peerId);
     if (!audio) return;
+    if (audio.previousElementSibling?.classList.contains("audio-retry")) audio.previousElementSibling.remove();
     audio.srcObject = null;
     audio.remove();
     voice.remoteAudioEls.delete(peerId);
@@ -922,7 +928,8 @@
 
   const sendVoiceState = (muted, speaking) => {
     if (!voice.joined) return;
-    const reportedMuted = Boolean(muted || !canSpeakInVoice());
+    const reportedMuted = effectiveVoiceMuted();
+    speaking = Boolean(speaking && !reportedMuted);
     const now = Date.now();
     const changed = reportedMuted !== lastVoiceState.muted || speaking !== lastVoiceState.speaking;
     if (!changed && now - lastVoiceStateAt < 1000) return;
@@ -982,11 +989,11 @@
     detachVoiceAudio(peerId);
   };
 
-  const shouldCreateOffer = (localId, remoteId) => localId.localeCompare(remoteId) < 0;
+  const shouldCreateOffer = (localId, remoteId) => localId < remoteId;
 
   const joinVoice = async () => {
     setVoiceWarning(false);
-    if (voice.joined) return;
+    if (voice.joined || voice.joining) return;
     const room = getVoiceRoom();
     if (!room) {
       updateVoiceUI();
@@ -1008,11 +1015,21 @@
       setVoiceWarning(true);
       return;
     }
+    voice.joining = true;
+    updateVoiceUI();
     try {
       voice.room = room;
-      voice.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const socket = ws;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      if (socket !== ws || ws.readyState !== WebSocket.OPEN || getVoiceRoom() !== room) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      voice.localStream = stream;
       voice.joined = true;
-      voice.muted = false;
+      voice.floorKnown = false;
+      voice.floorSuppressed = false;
+      voice.membershipId = createCallId();
       voice.floorOwner = null;
       applyVoiceTrackState();
       voiceJoinBtn.blur();
@@ -1020,12 +1037,17 @@
       console.log("[voice] joined");
       sendSignal({
         type: "voice:join",
-        payload: { muted: false, speaking: false },
+        payload: { muted: true, speaking: false, membershipId: voice.membershipId },
       });
+      voice.floorStateTimer = setTimeout(() => {
+        if (!voice.joined || voice.floorKnown) return;
+        leaveVoice();
+        renderMessage({ kind: "system", body: "Состояние голосовой комнаты не получено. Обновите сервер и страницы участников." });
+      }, 5000);
       monitorSpeaking(voice.localStream, "local", (speaking) => {
-        voiceLocalSpeaking = speaking;
+        voiceLocalSpeaking = speaking && !effectiveVoiceMuted();
         const selfState = voice.roster.get(getNickname()) || {};
-        voice.roster.set(getNickname(), { ...selfState, speaking });
+        voice.roster.set(getNickname(), { ...selfState, speaking: voiceLocalSpeaking });
         renderVoiceParticipants();
         sendVoiceState(voice.muted, voiceLocalSpeaking);
       });
@@ -1044,8 +1066,12 @@
         }
       }
     } catch (err) {
-      console.error("[voice] getUserMedia error:", err);
+      console.warn("[voice] getUserMedia error:", err.name);
+      cleanupVoice("join_failed");
       setVoiceWarning(true);
+    } finally {
+      voice.joining = false;
+      updateVoiceUI();
     }
   };
 
@@ -1057,8 +1083,11 @@
 
   const cleanupVoice = (reason) => {
     if (reason) console.log("[voice] cleanup:", reason);
+    clearTimeout(voice.floorStateTimer);
+    voice.floorStateTimer = null;
     voice.joined = false;
-    voice.muted = false;
+    voice.floorKnown = false;
+    voice.membershipId = null;
     voiceLocalSpeaking = false;
     voice.room = null;
     voice.floorOwner = null;
@@ -1080,7 +1109,9 @@
 
   const toggleVoiceMute = () => {
     if (!voice.joined || !voice.localStream) return;
-    voice.muted = !voice.muted;
+    voice.muted = !effectiveVoiceMuted();
+    voice.floorSuppressed = false;
+    voice.pttActive = false;
     applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     const selfState = voice.roster.get(getNickname()) || {};
@@ -1094,8 +1125,7 @@
     if (!canSpeakInVoice()) return;
     if (voice.pttActive) return;
     voice.pttActive = true;
-    voice.pttRestoreMuted = voice.muted;
-    voice.muted = false;
+
     applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     updateVoiceUI();
@@ -1105,16 +1135,21 @@
     if (!voice.joined || !voice.localStream) return;
     if (!voice.pttActive) return;
     voice.pttActive = false;
-    voice.muted = voice.pttRestoreMuted;
+
     applyVoiceTrackState();
     sendVoiceState(voice.muted, voiceLocalSpeaking);
     updateVoiceUI();
   };
 
   const toggleVoiceFloor = () => {
-    if (!voice.joined) return;
+    if (!voice.joined || !voice.floorKnown) return;
     const mine = voice.floorOwner === getNickname();
     if (mine) {
+      voice.floorSuppressed = true;
+      voice.pttActive = false;
+      applyVoiceTrackState();
+      sendVoiceState(voice.muted, voiceLocalSpeaking);
+      updateVoiceUI();
       sendSignal({ type: "voice:floor:release" });
       return;
     }
@@ -1128,7 +1163,7 @@
     try {
       await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
     } catch (err) {
-      console.error("[voice] setRemoteDescription error:", err);
+      console.warn("[voice] setRemoteDescription error:", err.name);
       return;
     }
     peer.readyForCandidates = true;
@@ -1136,7 +1171,7 @@
       try {
         await peer.pc.addIceCandidate(peer.iceQueue.shift());
       } catch (err) {
-        console.error("[voice] addIceCandidate error:", err);
+        console.warn("[voice] addIceCandidate error:", err.name);
       }
     }
     const answer = await peer.pc.createAnswer();
@@ -1153,7 +1188,7 @@
     try {
       await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
     } catch (err) {
-      console.error("[voice] setRemoteDescription error:", err);
+      console.warn("[voice] setRemoteDescription error:", err.name);
       return;
     }
     peer.readyForCandidates = true;
@@ -1161,7 +1196,7 @@
       try {
         await peer.pc.addIceCandidate(peer.iceQueue.shift());
       } catch (err) {
-        console.error("[voice] addIceCandidate error:", err);
+        console.warn("[voice] addIceCandidate error:", err.name);
       }
     }
   };
@@ -1172,7 +1207,7 @@
       try {
         await peer.pc.addIceCandidate(candidate);
       } catch (err) {
-        console.error("[voice] addIceCandidate error:", err);
+        console.warn("[voice] addIceCandidate error:", err.name);
       }
     } else {
       peer.iceQueue.push(candidate);
@@ -1186,13 +1221,6 @@
 
   const updateE2eeStatus = (text) => {
     e2eeStatus.textContent = text;
-  };
-
-  const e2eeKeyTag = (keyBytes) => {
-    if (!keyBytes || !keyBytes.length) return "none";
-    return Array.from(keyBytes.slice(0, 4))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
   };
 
   const resetCallDebug = (title) => {
@@ -1248,7 +1276,7 @@
     if (state === "in_call" && call.localStream) {
       const track = call.localStream.getAudioTracks()[0];
       if (track) {
-        callMuteBtn.textContent = track.enabled ? "Выключить" : "Включить";
+        callMuteBtn.textContent = !call.muted ? "Выключить" : "Включить";
       }
     } else {
       callMuteBtn.textContent = "Выключить";
@@ -1262,7 +1290,9 @@
     const audio = document.createElement("audio");
     audio.autoplay = true;
     audio.srcObject = call.remoteStream;
+    audio.playsInline = true;
     callRemoteAudioEl.appendChild(audio);
+    RemoteAudio.play(audio);
   };
 
   const startCallMeter = async () => {
@@ -1311,6 +1341,7 @@
   const cleanupCall = (reason) => {
     if (reason) console.log("[call] cleanup:", reason);
     AudioAlerts.stopAllTones();
+    E2EE.reset();
     if (call.connection) {
       call.connection.close();
       call.connection = null;
@@ -1325,6 +1356,7 @@
     call.callId = null;
     call.iceQueue = [];
     call.e2eeKeyPair = null;
+    call.e2eeKeyPairPromise = null;
     call.e2eeWrappingKey = null;
     call.e2eeCallKey = null;
     call.e2eeReady = false;
@@ -1354,6 +1386,7 @@
   };
 
   const createCallConnection = (peerId) => {
+    if (call.connection) return;
     call.connection = WebRTCCall.createConnection({
       onIceCandidate: (candidate) => {
         sendSignal({
@@ -1367,12 +1400,12 @@
         setupCallAudio();
       },
       onSender: (sender) => {
-        if (call.e2eeReady && call.e2eeCallKey && E2EE.supports) {
+        if (call.e2eeEnabled && E2EE.supports) {
           E2EE.attachSenderTransform(sender, call.e2eeCallKey);
         }
       },
       onReceiver: (receiver) => {
-        if (call.e2eeReady && call.e2eeCallKey && E2EE.supports) {
+        if (call.e2eeEnabled && E2EE.supports) {
           E2EE.attachReceiverTransform(receiver, call.e2eeCallKey);
         }
       },
@@ -1386,13 +1419,21 @@
     if (call.localStream) {
       call.connection.addLocalStream(call.localStream);
     }
+    if (call.e2eeEnabled) armE2EETimeout();
     console.log("[call] peer created:", peerId);
     tryEnableE2EE();
   };
 
   const prepareLocalCallStream = async () => {
     if (call.localStream) return;
-    call.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const session = call.callId;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    if (session !== call.callId) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error("Call ended during microphone permission");
+    }
+    stream.getAudioTracks().forEach((track) => { track.enabled = !call.muted && !call.e2eeEnabled; });
+    call.localStream = stream;
   };
 
   const startOutgoingCall = async (peerId) => {
@@ -1458,6 +1499,11 @@
     resetCallDebug(`E2EE debug on (call ${call.callId.slice(0, 6)})`);
     const remoteE2ee = Boolean(msg.payload && msg.payload.e2ee && msg.payload.e2ee.enabled);
     call.e2eeRequestedByPeer = remoteE2ee;
+    if (remoteE2ee && !E2EE.supports) {
+      sendSignal({ type: "call:reject", to: from, payload: { callId, reason: "e2ee_unsupported" } });
+      cleanupCall("e2ee_unsupported");
+      return;
+    }
     call.e2eeEnabled = Boolean(E2EE.supports && (remoteE2ee || e2eeToggle.checked));
     e2eeDebug(
       `E2EE: входящий, supports=${E2EE.supports ? "yes" : "no"}, remote=${remoteE2ee ? "on" : "off"}, toggle=${
@@ -1486,7 +1532,7 @@
     if (call.fsm.state !== "incoming") return;
     await AudioAlerts.ensureAudioUnlocked();
     AudioAlerts.stopAllTones();
-    sendSignal({ type: "call:accept", to: call.peerId, payload: { callId: call.callId } });
+
     e2eeDebug(
       `E2EE: accept, enabled=${call.e2eeEnabled ? "yes" : "no"}, supports=${E2EE.supports ? "yes" : "no"}`
     );
@@ -1495,12 +1541,19 @@
     }
     call.fsm.transition("accepted");
     updateCallUI();
-    await prepareLocalCallStream();
+    const session = call.callId;
+    try { await prepareLocalCallStream(); } catch (_) {
+      if (session !== call.callId) return;
+      sendSignal({ type: "call:reject", to: call.peerId, payload: { callId: session, reason: "microphone" } });
+      cleanupCall("microphone_failed");
+      renderMessage({ kind: "system", body: "Не удалось открыть микрофон." });
+      return;
+    }
+    if (session !== call.callId) return;
     createCallConnection(call.peerId);
     startCallMeter();
-    if (call.e2eeEnabled) {
-      startE2EEHandshake();
-    }
+    sendSignal({ type: "call:accept", to: call.peerId, payload: { callId: session } });
+    if (call.e2eeEnabled) await startE2EEHandshake();
   };
 
   const rejectIncomingCall = (reason = "rejected") => {
@@ -1530,25 +1583,33 @@
     if (!call.localStream) return;
     const track = call.localStream.getAudioTracks()[0];
     if (!track) return;
-    track.enabled = !track.enabled;
-    callMuteBtn.textContent = track.enabled ? "Выключить" : "Включить";
+    call.muted = !call.muted;
+    track.enabled = !call.muted && (!call.e2eeEnabled || call.e2eeReady);
+    callMuteBtn.textContent = !call.muted ? "Выключить" : "Включить";
   };
 
   const handleCallOffer = async (msg) => {
-    if (!call.peerId || msg.from !== call.peerId) return;
+    if (!call.peerId || msg.from !== call.peerId || call.fsm.state !== "in_call") return;
     if (msg.payload.callId !== call.callId) return;
     if (!call.connection) {
-      await prepareLocalCallStream();
+      const session = call.callId;
+      try { await prepareLocalCallStream(); } catch (_) {
+        if (session !== call.callId) return;
+        hangupCall();
+        renderMessage({ kind: "system", body: "Не удалось открыть микрофон." });
+        return;
+      }
+      if (session !== call.callId) return;
       createCallConnection(call.peerId);
       startCallMeter();
       if (call.e2eeEnabled) {
-        startE2EEHandshake();
+        await startE2EEHandshake();
       }
     }
     try {
       await call.connection.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
     } catch (err) {
-      console.error("[call] setRemoteDescription error:", err);
+      console.warn("[call] setRemoteDescription error:", err.name);
       return;
     }
     const answer = await call.connection.createAnswer();
@@ -1561,7 +1622,7 @@
       try {
         await call.connection.addIceCandidate(candidate);
       } catch (err) {
-        console.error("[call] addIceCandidate error:", err);
+        console.warn("[call] addIceCandidate error:", err.name);
       }
     }
     call.iceQueue = [];
@@ -1573,14 +1634,14 @@
     try {
       await call.connection.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
     } catch (err) {
-      console.error("[call] setRemoteDescription error:", err);
+      console.warn("[call] setRemoteDescription error:", err.name);
       return;
     }
     for (const candidate of call.iceQueue) {
       try {
         await call.connection.addIceCandidate(candidate);
       } catch (err) {
-        console.error("[call] addIceCandidate error:", err);
+        console.warn("[call] addIceCandidate error:", err.name);
       }
     }
     call.iceQueue = [];
@@ -1595,11 +1656,32 @@
     try {
       await call.connection.addIceCandidate(msg.payload.candidate);
     } catch (err) {
-      console.error("[call] addIceCandidate error:", err);
+      console.warn("[call] addIceCandidate error:", err.name);
     }
   };
 
+  const armE2EETimeout = () => {
+    if (call.e2eeTimeout || call.e2eeReady) return;
+    if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
+    call.e2eeTimeout = setTimeout(() => {
+      if (!call.e2eeReady) {
+        renderMessage({ kind: "system", body: "E2EE не согласовано. Звонок завершён без отключения шифрования." });
+        hangupCall();
+      }
+    }, 10000);
+  };
+
+  const ensureE2EEKeyPair = async () => {
+    const session = call.callId;
+    if (!call.e2eeKeyPairPromise) call.e2eeKeyPairPromise = KeyExchange.generateKeyPair();
+    const pair = await call.e2eeKeyPairPromise;
+    if (session !== call.callId) throw new Error("Stale key exchange");
+    call.e2eeKeyPair = pair;
+    return pair;
+  };
+
   const startE2EEHandshake = async () => {
+    const session = call.callId;
     if (!call.e2eeEnabled || !E2EE.supports || call.e2eeReady) return;
     if (call.e2eeHandshakeStarting || call.e2eeKeyPair) {
       e2eeDebug("E2EE: рукопожатие уже запущено");
@@ -1609,14 +1691,11 @@
     call.e2eePendingGo = false;
     call.e2eeGoAcked = false;
     e2eeDebug("E2EE: старт рукопожатия");
-    call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+    await ensureE2EEKeyPair();
+    if (session !== call.callId) return;
     call.e2eeHandshakeStarting = false;
-    call.e2eeKeyRequested = false;
-    call.e2eeSentPubkey = false;
-    call.e2eeGoReceived = false;
-    call.e2eeGoAckReceived = false;
-    call.e2eePendingKey = null;
     const publicKeyJwk = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
+    if (session !== call.callId) return;
     e2eeDebug("E2EE: отправляем pubkey");
     const sendPubkey = () => {
       sendSignal({
@@ -1639,33 +1718,30 @@
       e2eeDebug(`E2EE: повтор pubkey (${pubkeyAttempts})`);
       sendPubkey();
     }, 1000);
-    if (call.e2eeTimeout) clearTimeout(call.e2eeTimeout);
-    call.e2eeTimeout = setTimeout(() => {
-      if (!call.e2eeReady) {
-        call.e2eeEnabled = false;
-        updateE2eeStatus("E2EE таймаут, используем DTLS-SRTP");
-        sendSignal({ type: "e2ee:disabled", to: call.peerId, payload: { callId: call.callId } });
-      }
-    }, 10000);
+
   };
 
   const handleE2eePubkey = async (msg) => {
+    const session = call.callId;
     if (msg.payload.callId !== call.callId) return;
     if (!E2EE.supports) return;
     if (!call.e2eeEnabled) {
       call.e2eeEnabled = true;
+      call.localStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+      armE2EETimeout();
       e2eeToggle.checked = true;
       updateE2eeStatus("E2EE: подключение...");
       e2eeDebug("E2EE: авто-включение по pubkey");
     }
     if (!call.e2eeKeyPair) {
       e2eeDebug("E2EE: создаем ключи по pubkey");
-      call.e2eeKeyPair = await KeyExchange.generateKeyPair();
+      await ensureE2EEKeyPair();
       call.e2eeSentPubkey = false;
     }
     e2eeDebug("E2EE: получили pubkey");
     if (!call.e2eeSentPubkey) {
       const selfPub = await KeyExchange.exportPublicKey(call.e2eeKeyPair);
+      if (session !== call.callId) return;
       sendSignal({
         type: "e2ee:pubkey",
         to: call.peerId,
@@ -1675,11 +1751,10 @@
       e2eeDebug("E2EE: ответили pubkey");
     }
     const remoteKey = await KeyExchange.importPublicKey(msg.payload.publicKeyJwk);
+    if (session !== call.callId) return;
     const wrappingKey = await KeyExchange.deriveWrappingKey(call.e2eeKeyPair.privateKey, remoteKey);
+    if (session !== call.callId) return;
     call.e2eeWrappingKey = wrappingKey;
-    if (!call.fsm.context.initiator) {
-      call.e2eeCallKey = null;
-    }
     if (call.e2eePendingKey) {
       const pending = call.e2eePendingKey;
       call.e2eePendingKey = null;
@@ -1689,8 +1764,9 @@
       if (!call.e2eeCallKey) {
         call.e2eeCallKey = KeyExchange.randomCallKey();
       }
-      e2eeDebug(`E2EE: ключ инициатора ${e2eeKeyTag(call.e2eeCallKey)}`);
+      e2eeDebug("E2EE: ключ инициатора готов");
       const wrapped = await KeyExchange.wrapCallKey(wrappingKey, call.e2eeCallKey);
+      if (session !== call.callId) return;
       e2eeDebug("E2EE: отправляем key");
       sendSignal({
         type: "e2ee:key",
@@ -1707,6 +1783,7 @@
   };
 
   const handleE2eeKey = async (msg) => {
+    const session = call.callId;
     if (msg.payload.callId !== call.callId) return;
     if (!call.e2eeEnabled) return;
     if (!call.e2eeWrappingKey) {
@@ -1715,12 +1792,14 @@
       return;
     }
     e2eeDebug("E2EE: получили key");
-    call.e2eeCallKey = await KeyExchange.unwrapCallKey(
+    const callKey = await KeyExchange.unwrapCallKey(
       call.e2eeWrappingKey,
       msg.payload.ivB64,
       msg.payload.encryptedKeyB64
     );
-    e2eeDebug(`E2EE: ключ получателя ${e2eeKeyTag(call.e2eeCallKey)}`);
+    if (session !== call.callId) return;
+    call.e2eeCallKey = callKey;
+    e2eeDebug("E2EE: ключ получателя готов");
     call.e2eeKeyRequested = false;
     tryEnableE2EE();
     const sendReady = (ack = "") =>
@@ -1743,7 +1822,6 @@
 
   const enableE2EETransforms = () => {
     if (!call.connection || !call.e2eeCallKey || call.e2eeReady) return;
-    call.e2eeReady = true;
     if (call.e2eeTimeout) {
       clearTimeout(call.e2eeTimeout);
       call.e2eeTimeout = null;
@@ -1751,7 +1829,7 @@
     updateE2eeStatus("E2EE включено");
     const senders = call.connection && call.connection.pc ? call.connection.pc.getSenders().length : 0;
     const receivers = call.connection && call.connection.pc ? call.connection.pc.getReceivers().length : 0;
-    e2eeDebug(`E2EE: трансформы включены (key=${e2eeKeyTag(call.e2eeCallKey)}, s=${senders}, r=${receivers})`);
+    e2eeDebug(`E2EE: трансформы включены (s=${senders}, r=${receivers})`);
     if (call.connection.pc) {
       call.connection.pc.getSenders().forEach((sender) => {
         if (sender.track && sender.track.kind === "audio") {
@@ -1764,6 +1842,8 @@
         }
       });
     }
+    call.e2eeReady = true;
+    call.localStream?.getAudioTracks().forEach((track) => { track.enabled = !call.muted; });
   };
 
   const tryEnableE2EE = () => {
@@ -1778,16 +1858,31 @@
     enableE2EETransforms();
   };
 
+  window.addEventListener("e2ee-error", () => {
+    if (!call.e2eeEnabled) return;
+    renderMessage({ kind: "system", body: "Ошибка шифрования аудио. Звонок завершён; повторите вызов." });
+    hangupCall();
+  });
+
   const handleSignal = async (msg) => {
     if (!msg || !msg.type) return;
+    if (isVoiceSignal(msg) && !VoiceState.accepts(voice, msg)) return;
+    if ((msg.type.startsWith("e2ee:") || (msg.type.startsWith("webrtc:") && msg.payload?.callId)) &&
+        (msg.from !== call.peerId || msg.payload?.callId !== call.callId)) return;
     if (msg.type.startsWith("e2ee:")) {
       const msgCallId = msg.payload && msg.payload.callId ? msg.payload.callId : "none";
       e2eeDebug(`E2EE: recv ${msg.type} (callId=${msgCallId})`);
     }
+    if (msg.type === "voice:state" && msg.payload?.full) {
+      cleanupVoice("room_full");
+      setVoiceWarning(true);
+      return;
+    }
     if (msg.type === "voice:state") {
       if (msg.payload && Array.isArray(msg.payload.participants)) {
         if (Object.prototype.hasOwnProperty.call(msg.payload, "floorOwner")) {
-          voice.floorOwner = msg.payload.floorOwner || null;
+          clearTimeout(voice.floorStateTimer);
+          VoiceState.setFloor(voice, msg.payload.floorOwner || null, getNickname());
         }
         voice.roster = new Map(
           msg.payload.participants.map((p) => [p.id, { muted: p.muted, speaking: p.speaking }])
@@ -1852,7 +1947,9 @@
       if (!msg.from) return;
       voice.roster.delete(msg.from);
       if (voice.floorOwner === msg.from) {
-        voice.floorOwner = null;
+        VoiceState.setFloor(voice, null, getNickname());
+        applyVoiceTrackState();
+        sendVoiceState(voice.muted, voiceLocalSpeaking);
       }
       closeVoicePeer(msg.from);
       setVoiceWarning(voice.roster.size >= VOICE_LIMIT);
@@ -1918,11 +2015,18 @@
           E2EE.supports ? "yes" : "no"
         }`
       );
-      await prepareLocalCallStream();
+      const session = call.callId;
+      try { await prepareLocalCallStream(); } catch (_) {
+        if (session !== call.callId) return;
+        hangupCall();
+        renderMessage({ kind: "system", body: "Не удалось открыть микрофон." });
+        return;
+      }
+      if (session !== call.callId) return;
       createCallConnection(call.peerId);
       startCallMeter();
       if (call.e2eeEnabled) {
-        startE2EEHandshake();
+        await startE2EEHandshake();
       }
       const offer = await call.connection.createOffer();
       sendSignal({
@@ -2041,6 +2145,7 @@
       if (msg.payload && msg.payload.callId !== call.callId) return;
       if (!E2EE.supports) {
         updateE2eeStatus("E2EE не поддерживается");
+        hangupCall();
         return;
       }
       if (call.e2eeEnabled) {
@@ -2049,10 +2154,12 @@
       }
       e2eeDebug("E2EE: включено по сигналу");
       call.e2eeEnabled = true;
+      call.localStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+      armE2EETimeout();
       e2eeToggle.checked = true;
       updateE2eeStatus("E2EE: подключение...");
       if (call.fsm.state === "in_call" || call.connection) {
-        startE2EEHandshake();
+        await startE2EEHandshake();
       }
       return;
     }
@@ -2060,9 +2167,7 @@
     if (msg.type === "e2ee:disabled") {
       if (msg.payload && msg.payload.callId !== call.callId) return;
       e2eeDebug("E2EE: отключено по сигналу");
-      call.e2eeEnabled = false;
-      call.e2eePendingGo = false;
-      updateE2eeStatus("E2EE выключено");
+      if (call.e2eeEnabled) hangupCall();
       return;
     }
   };

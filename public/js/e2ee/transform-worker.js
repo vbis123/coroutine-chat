@@ -1,4 +1,3 @@
-let failureCount = 0;
 const MAGIC = new Uint8Array([0x45, 0x32, 0x45, 0x45]); // "E2EE"
 
 const importKey = async (raw) =>
@@ -18,11 +17,11 @@ const encryptFrame = async (frame, key) => {
 const decryptFrame = async (frame, key) => {
   const data = new Uint8Array(frame.data);
   if (data.byteLength <= MAGIC.byteLength + 12) {
-    return frame;
+    throw new Error("Unencrypted E2EE frame");
   }
   for (let i = 0; i < MAGIC.byteLength; i += 1) {
     if (data[i] !== MAGIC[i]) {
-      return frame;
+      throw new Error("Unencrypted E2EE frame");
     }
   }
   const iv = data.slice(MAGIC.byteLength, MAGIC.byteLength + 12);
@@ -32,13 +31,20 @@ const decryptFrame = async (frame, key) => {
   return frame;
 };
 
-self.onrtctransform = async (event) => {
+self.onrtctransform = (event) => {
   const transformer = event.transformer;
-  const { role, key } = transformer.options;
-  const cryptoKey = await importKey(key);
+  const { role, port } = transformer.options;
+  let cryptoKey = null;
+  let failureCount = 0;
+  let frames = 0;
+  port.onmessage = async (message) => {
+    try { cryptoKey = await importKey(message.data.key); }
+    catch (_) { self.postMessage({ type: "e2ee:error" }); }
+  };
 
   const transformStream = new TransformStream({
     async transform(encodedFrame, controller) {
+      if (!cryptoKey) return; // Fail closed while the handshake is pending.
       try {
         if (role === "encrypt") {
           const output = await encryptFrame(encodedFrame, cryptoKey);
@@ -48,9 +54,11 @@ self.onrtctransform = async (event) => {
           if (output) controller.enqueue(output);
         }
         failureCount = 0;
+        frames++;
+        if (frames % 50 === 0) self.postMessage({ type: "e2ee:stats", role, frames });
       } catch (err) {
         failureCount += 1;
-        if (failureCount > 3) {
+        if (failureCount === 4) {
           self.postMessage({ type: "e2ee:error", error: err.message || String(err) });
         }
       }
