@@ -25,32 +25,21 @@ body {
 .app {
   max-width: 860px;
   margin: 0 auto;
-  padding: 32px 20px 48px;
+  padding: 16px 20px 32px;
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .header-actions {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
-}
-
-h1 {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: 0.5px;
-}
-
-.sub {
-  margin: 4px 0 0;
-  color: var(--muted);
 }
 
 .status {
@@ -427,18 +416,26 @@ button:hover {
 }
 
 .menu-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 6px 0 16px;
-  padding: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 6px;
   border-radius: 14px;
   background: #f6f0e8;
   border: 1px solid var(--border);
 }
 
+.menu-tabs.hidden {
+  display: none;
+}
+
 .menu-tab {
-  padding: 10px 16px;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
+  text-transform: uppercase;
+  padding: 10px 8px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -523,6 +520,18 @@ button:hover {
 .call-controls button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+#voice-join {
+  background: #15803d;
+  color: #fff;
+  border-color: transparent;
+}
+
+#voice-leave {
+  background: #d92d20;
+  color: #fff;
+  border-color: transparent;
 }
 
 .call-controls .danger {
@@ -758,5 +767,15 @@ button:hover {
 @media (min-width: 701px) and (max-width: 1024px) and (pointer: coarse) {
   .menu-tab {
     font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    padding: 12px 12px 24px;
+  }
+
+  .menu-tab {
+    font-size: 14px;
   }
 }
