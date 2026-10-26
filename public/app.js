@@ -155,6 +155,7 @@
     iceQueue: [],
     callId: null,
     peerId: null,
+    accepting: false,
     e2eeEnabled: false,
     e2eeReady: false,
     e2eeKeyPair: null,
@@ -1330,10 +1331,15 @@
 
   const updateCallUI = () => {
     const state = call.fsm.state;
+    const canAccept = state === "incoming" && !call.accepting;
+    callAcceptBtn.disabled = !canAccept;
+    callAcceptBtn.classList.toggle("is-incoming", canAccept);
+    callAcceptBtn.textContent = call.accepting ? "Готово" : "Принять";
+    callRejectBtn.disabled = !canAccept;
     callMuteBtn.disabled = state !== "in_call";
     callHangupBtn.disabled = state !== "in_call";
     outgoingCallEl.classList.toggle("hidden", state !== "outgoing");
-    incomingCallEl.classList.toggle("hidden", state !== "incoming");
+    incomingCallEl.classList.toggle("hidden", state !== "incoming" && !call.accepting);
     if (state === "idle") {
       callStatusEl.textContent = "Звонков нет.";
     } else if (state === "outgoing") {
@@ -1425,6 +1431,7 @@
     call.remoteStream = null;
     callRemoteAudioEl.innerHTML = "";
     call.peerId = null;
+    call.accepting = false;
     call.callId = null;
     call.iceQueue = [];
     call.e2eeKeyPair = null;
@@ -1601,8 +1608,12 @@
   };
 
   const acceptIncomingCall = async () => {
-    if (call.fsm.state !== "incoming") return;
-    await AudioAlerts.ensureAudioUnlocked();
+    if (call.fsm.state !== "incoming" || call.accepting) return;
+    const session = call.callId;
+    call.accepting = true;
+    updateCallUI();
+    try { await AudioAlerts.ensureAudioUnlocked(); } catch (_) { updateSoundUnlock(); }
+    if (session !== call.callId || call.fsm.state !== "incoming") return;
     AudioAlerts.stopAllTones();
 
     e2eeDebug(
@@ -1613,7 +1624,6 @@
     }
     call.fsm.transition("accepted");
     updateCallUI();
-    const session = call.callId;
     try { await prepareLocalCallStream(); } catch (_) {
       if (session !== call.callId) return;
       sendSignal({ type: "call:reject", to: call.peerId, payload: { callId: session, reason: "microphone" } });

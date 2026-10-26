@@ -73,7 +73,7 @@ async function main() {
     const suffix = process.env.VOICE_TEST_URL ? `probe-${Date.now().toString(36)}-` : "";
     const names = [suffix + "alice", suffix + "bob"];
     for (const name of names) {
-      const context = await browser.newContext({ permissions: ["microphone"] });
+      const context = await browser.newContext({ permissions: ["microphone"], viewport: { width: Number(process.env.VOICE_TEST_WIDTH || 1280), height: 900 } });
       await context.addInitScript(({ name, wsPort, remote }) => {
         localStorage.setItem("authToken", "synthetic-test-session");
         const NativeWS = window.WebSocket;
@@ -82,8 +82,14 @@ async function main() {
         const PC = window.RTCPeerConnection;
         window.RTCPeerConnection = class extends PC { constructor(...args) { super(...args); window.testPCs.push(this); } };
         if (name.endsWith("bob")) {
+          window.testMediaRequests = 0;
           const get = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-          navigator.mediaDevices.getUserMedia = async (...args) => { await new Promise((r) => setTimeout(r, 1500)); return get(...args); };
+          navigator.mediaDevices.getUserMedia = async (...args) => {
+            window.testMediaRequests++;
+            await new Promise((r) => setTimeout(r, 1500));
+            if (window.testDenyMicrophone) { window.testDenyMicrophone = false; throw new DOMException("Synthetic microphone denial", "NotAllowedError"); }
+            return get(...args);
+          };
         }
       }, { name, wsPort, remote: Boolean(process.env.VOICE_TEST_URL) });
       await context.route("**/api/me", (route) => route.fulfill({ json: { username: name } }));
@@ -189,8 +195,19 @@ async function main() {
       for (let i = 0; i < pages.length; i++) { await pages[i].locator("#menu-calls").click(); await pages[i].locator("#e2ee-toggle").setChecked(settings[i]); }
       await a.locator(".user-row").filter({ hasText: names[1] }).getByRole("button", { name: "Позвонить", exact: true }).click();
       await b.waitForFunction(() => !document.querySelector("#incoming-call").classList.contains("hidden"));
-      await b.locator("#call-accept").click();
+      const accept = b.locator("#call-accept");
+      assert.equal(await accept.textContent(), "Принять");
+      assert.equal(await accept.isEnabled(), true);
+      assert.equal(await accept.evaluate((el) => getComputedStyle(el).backgroundColor), "rgb(21, 128, 61)");
+      const beforeMedia = await b.evaluate(() => window.testMediaRequests);
+      await accept.click();
+      assert.equal(await accept.textContent(), "Готово");
+      assert.equal(await accept.isDisabled(), true);
+      assert.equal(await accept.evaluate((el) => getComputedStyle(el).backgroundColor), "rgb(229, 231, 235)");
+      assert.equal(await b.locator("#incoming-call").isVisible(), true);
+      await accept.dispatchEvent("click"); // Explicit duplicate event must not accept twice.
       await delay(6000);
+      assert.equal(await b.evaluate(() => window.testMediaRequests), beforeMedia + 1);
       if (encrypted) for (const page of pages) await page.locator("#e2ee-status").filter({ hasText: "E2EE включено" }).waitFor();
       await report(encrypted ? "call-e2ee" : "call-plain");
       if (encrypted && !process.env.BASELINE_REF) for (const page of pages) {
@@ -198,9 +215,29 @@ async function main() {
         assert.ok(counters.encrypt >= 100 && counters.decrypt >= 100, "both encryption directions process frames");
       }
       await a.locator("#call-hangup").click();
+      await b.waitForFunction(() => document.querySelector("#call-accept").textContent === "Принять");
+      assert.equal(await b.locator("#call-accept").isDisabled(), true);
       // Respect the application's 10-second per-peer invite cooldown.
       await delay(10500);
     }
+    // A failed permission request must restore the inactive accept button.
+    for (const page of pages) await page.locator("#e2ee-toggle").uncheck();
+    await b.evaluate(() => { window.testDenyMicrophone = true; });
+    await a.locator(".user-row").filter({ hasText: names[1] }).getByRole("button", { name: "Позвонить", exact: true }).click();
+    await b.waitForFunction(() => !document.querySelector("#incoming-call").classList.contains("hidden"));
+    await b.locator("#call-accept").click();
+    await b.waitForFunction(() => document.querySelector("#call-status").textContent === "Звонков нет.");
+    assert.equal(await b.locator("#call-accept").textContent(), "Принять");
+    assert.equal(await b.locator("#call-accept").isDisabled(), true);
+    assert.equal(await b.locator("#call-accept").evaluate((el) => getComputedStyle(el).backgroundColor), "rgb(229, 231, 235)");
+    await delay(10500);
+    // A cancelled incoming call must stop advertising an available accept action.
+    await a.locator(".user-row").filter({ hasText: names[1] }).getByRole("button", { name: "Позвонить", exact: true }).click();
+    await b.waitForFunction(() => !document.querySelector("#call-accept").disabled);
+    await a.locator("#call-cancel").click();
+    await b.waitForFunction(() => document.querySelector("#call-accept").disabled);
+    assert.equal(await b.locator("#call-accept").textContent(), "Принять");
+    console.log("accept button: green -> disabled gray ready -> idle; duplicate, permission denial and cancellation passed");
     // Close and reopen an owner's WebSocket through the actual client UI.
     for (const page of pages) { await page.locator("#menu-voice").click(); await page.locator("#voice-join").click(); }
     await a.locator("#voice-floor").click();
