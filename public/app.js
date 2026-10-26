@@ -1218,7 +1218,8 @@
     if (!voice.joined || !voice.floorKnown) return;
     const mine = voice.floorOwner === getNickname();
     if (mine) {
-      voice.floorSuppressed = true;
+      // Releasing ownership preserves the explicit mute preference.
+      voice.floorSuppressed = false;
       voice.pttActive = false;
       applyVoiceTrackState();
       sendVoiceState(voice.muted, voiceLocalSpeaking);

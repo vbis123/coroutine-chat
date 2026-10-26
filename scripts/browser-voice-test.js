@@ -172,8 +172,30 @@ async function main() {
       assert.equal(await trackEnabled(b), true);
       await b.locator("#voice-ptt").dispatchEvent("mouseup");
       assert.equal(await trackEnabled(b), false, "PTT restores prior listener state");
-      console.log("floor-mute-ptt passed");
+      // Releasing ownership is not a user mute action.
+      await a.locator("#voice-mute").click();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await a.locator("#voice-floor").click();
+        await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("alice"));
+        assert.equal(await trackEnabled(a), true, "unmuted owner keeps transmitting");
+        await a.locator("#voice-floor").click();
+        await a.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
+        assert.equal(await trackEnabled(a), true, "own release must not act as the mute button");
+        assert.equal(await a.locator("#voice-mute").textContent(), "Выключить");
+        assert.equal(await trackEnabled(b), false, "listeners keep their current mute state");
+      }
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("alice"));
+      await a.locator("#voice-mute").click();
+      await a.locator("#voice-ptt").dispatchEvent("mousedown");
+      assert.equal(await trackEnabled(a), true);
+      await a.locator("#voice-floor").dispatchEvent("click");
+      await a.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
+      assert.equal(await trackEnabled(a), false, "PTT release restores explicit mute");
+      assert.equal(await a.locator("#voice-mute").textContent(), "Включить");
+      console.log("floor-mute-ptt passed, including repeated own release and explicit mute");
     }
+    if (process.env.VOICE_TEST_FLOOR_ONLY) return;
     for (const page of pages) await page.locator("#voice-leave").click();
     if (!process.env.BASELINE_REF) {
       for (const page of pages) {
