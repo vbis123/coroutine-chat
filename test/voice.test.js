@@ -183,3 +183,20 @@ test("ending a personal call does not terminate the encrypted room worker", () =
   assert.equal(workers[0].ended, undefined); assert.equal(workers[1].ended, true);
   e.reset("room"); assert.equal(workers[0].ended, true);
 });
+
+
+test("floor countdown counts down without changing ownership or mute", () => {
+  const sandbox = { window: {} };
+  vm.runInNewContext(source("voice_state"), sandbox);
+  const f = sandbox.window.VoiceState;
+  const state = { floorOwner: "alice", floorDeadlineAt: 61000, muted: true };
+  assert.equal(f.floorSecondsLeft(state, 1000), 60);
+  assert.equal(f.floorSecondsLeft(state, 2000), 59);
+  assert.equal(f.floorSecondsLeft(state, 60000), 1);
+  assert.equal(f.floorSecondsLeft(state, 61000), 0);
+  assert.equal(f.floorSecondsLeft(state, 70000), 0);
+  assert.equal(state.floorOwner, "alice");
+  assert.equal(state.muted, true);
+  state.floorOwner = null;
+  assert.equal(f.floorSecondsLeft(state, 70000), null);
+});

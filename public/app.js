@@ -133,6 +133,8 @@
     audioCtx: null,
     floorOwner: null,
     floorStateTimer: null,
+    floorDeadlineAt: null,
+    floorCountdownTimer: null,
     floorKnown: false,
     floorSuppressed: false,
     membershipId: null,
@@ -829,6 +831,15 @@
     });
   };
 
+  const updateVoiceFloorStatus = () => {
+    const seconds = VoiceState.floorSecondsLeft(voice);
+    const countdown = seconds === null ? "" : ` · осталось ${seconds} с`;
+    voiceFloorStatus.textContent = voice.joined && !voice.floorKnown ? "Получаем состояние комнаты…" : hasVoiceFloor()
+      ? `Общий микрофон удерживает: ${voice.floorOwner}${countdown}`
+      : "Общий микрофон: свободен";
+    voiceFloorStatus.classList.toggle("busy", hasVoiceFloor());
+  };
+
   const updateVoiceUI = () => {
     const hasSettings = hasVoiceSettings();
     const e2eeSupported = Boolean(E2EE.supports);
@@ -867,10 +878,14 @@
     voiceMicStatus.textContent = voice.joined
       ? `Микрофон: ${effectiveVoiceMuted() ? "мут" : "живой"}`
       : "Микрофон: выкл";
-    voiceFloorStatus.textContent = voice.joined && !voice.floorKnown ? "Получаем состояние комнаты…" : hasVoiceFloor()
-      ? `Общий микрофон удерживает: ${voice.floorOwner}`
-      : "Общий микрофон: свободен";
-    voiceFloorStatus.classList.toggle("busy", floorBusy);
+    updateVoiceFloorStatus();
+    const needsCountdown = voice.joined && voice.floorOwner && voice.floorDeadlineAt !== null;
+    if (needsCountdown && !voice.floorCountdownTimer) {
+      voice.floorCountdownTimer = setInterval(updateVoiceFloorStatus, 250);
+    } else if (!needsCountdown && voice.floorCountdownTimer) {
+      clearInterval(voice.floorCountdownTimer);
+      voice.floorCountdownTimer = null;
+    }
   };
 
   const setVoiceWarning = (show) => {
@@ -1164,6 +1179,7 @@
     voice.e2eeEnabled = false;
     voice.verificationCode = null;
     voice.floorOwner = null;
+    voice.floorDeadlineAt = null;
     voice.pttActive = false;
     stopSpeakingMonitor("local");
     for (const peerId of Array.from(voice.peers.keys())) {
@@ -1971,6 +1987,8 @@
         if (Object.prototype.hasOwnProperty.call(msg.payload, "floorOwner")) {
           clearTimeout(voice.floorStateTimer);
           VoiceState.setFloor(voice, msg.payload.floorOwner || null, getNickname());
+          voice.floorDeadlineAt = voice.floorOwner && Number.isFinite(msg.payload.floorRemainingMs)
+            ? Date.now() + Math.max(0, msg.payload.floorRemainingMs) : null;
         }
         voice.roster = new Map(
           msg.payload.participants.map((p) => [p.id, { muted: p.muted, speaking: p.speaking }])
@@ -2036,6 +2054,7 @@
       voice.roster.delete(msg.from);
       if (voice.floorOwner === msg.from) {
         VoiceState.setFloor(voice, null, getNickname());
+        voice.floorDeadlineAt = null;
         applyVoiceTrackState();
         sendVoiceState(voice.muted, voiceLocalSpeaking);
       }

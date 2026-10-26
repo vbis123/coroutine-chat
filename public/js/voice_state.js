@@ -11,5 +11,9 @@
   };
   const accepts = (state, message) => state.joined && message.room === state.room &&
     message.membershipId === state.membershipId;
-  window.VoiceState = { canSpeak, muted, setFloor, accepts };
+  const floorSecondsLeft = (state, now = Date.now()) => {
+    if (!state.floorOwner || !Number.isFinite(state.floorDeadlineAt)) return null;
+    return Math.max(0, Math.ceil((state.floorDeadlineAt - now) / 1000));
+  };
+  window.VoiceState = { canSpeak, muted, setFloor, accepts, floorSecondsLeft };
 })();

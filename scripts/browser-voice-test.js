@@ -195,6 +195,30 @@ async function main() {
       assert.equal(await a.locator("#voice-mute").textContent(), "Включить");
       console.log("floor-mute-ptt passed, including repeated own release and explicit mute");
     }
+    if (process.env.VOICE_TEST_FLOOR_TIMER) {
+      await a.locator("#voice-mute").click(); // prior floor test left explicit mute enabled
+      const started = Date.now();
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => /осталось \d+ с/.test(document.querySelector("#voice-floor-status").textContent));
+      const remaining = (page) => page.locator("#voice-floor-status").textContent().then((text) => Number(text.match(/осталось (\d+) с/)[1]));
+      const initial = await remaining(b);
+      assert.ok(initial >= 58 && initial <= 60);
+      await delay(1500);
+      assert.ok(await remaining(b) < initial, "visible countdown decreases");
+      await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"), null, { timeout: 65000 });
+      await a.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed >= 59000 && elapsed < 68000, "server releases ownership at one minute");
+      assert.equal(await a.locator("#voice-floor").textContent(), "Забрать микрофон");
+      const enabled = await a.evaluate(() => window.testPCs.filter((pc) => pc.connectionState !== "closed")[0].getSenders()[0].track.enabled);
+      assert.equal(enabled, true, "expiration preserves the owner's unmuted preference");
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => /осталось \d+ с/.test(document.querySelector("#voice-floor-status").textContent));
+      assert.ok(await remaining(b) >= 58, "new capture gets a new minute");
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
+      console.log("real floor timer passed: automatic release after", elapsed, "ms; countdown and fresh capture verified");
+    }
     if (process.env.VOICE_TEST_FLOOR_ONLY) return;
     for (const page of pages) await page.locator("#voice-leave").click();
     if (!process.env.BASELINE_REF) {
