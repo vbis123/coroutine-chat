@@ -7,7 +7,7 @@
     if (state.floorOwner !== owner) state.pttActive = false;
     state.floorOwner = owner;
     state.floorKnown = true;
-    if (owner && owner !== id) state.floorSuppressed = true;
+    state.floorSuppressed = Boolean(owner && owner !== id);
   };
   const accepts = (state, message) => state.joined && message.room === state.room &&
     message.membershipId === state.membershipId;

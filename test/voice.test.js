@@ -33,7 +33,7 @@ test("config readiness waits for network, handles HTTP errors visibly and never 
   assert.equal(alerts, 1);
 });
 
-test("floor transitions preserve explicit mute, cancel PTT and never auto-unmute listeners", () => {
+test("floor transitions preserve explicit mute and cancel PTT", () => {
   const sandbox = { window: {} };
   vm.runInNewContext(source("voice_state"), sandbox);
   const f = sandbox.window.VoiceState;
@@ -50,9 +50,7 @@ test("floor transitions preserve explicit mute, cancel PTT and never auto-unmute
   f.setFloor(state, null, "alice");
   assert.equal(f.muted(state, "alice"), true);
   state.muted = false;
-  assert.equal(f.muted(state, "alice"), true); // suppression remains until explicit action
-  state.floorSuppressed = false;
-  assert.equal(f.muted(state, "alice"), false);
+  assert.equal(f.muted(state, "alice"), false, "floor release clears only temporary suppression");
   assert.equal(f.accepts(state, { room: "b", membershipId: "new" }), false);
   assert.equal(f.accepts(state, { room: "a", membershipId: "old" }), false);
   state.joined = false;
@@ -199,4 +197,25 @@ test("floor countdown counts down without changing ownership or mute", () => {
   assert.equal(state.muted, true);
   state.floorOwner = null;
   assert.equal(f.floorSecondsLeft(state, 70000), null);
+});
+
+
+test("temporary floor blocking restores each listener's own mute preference", () => {
+  const sandbox = { window: {} };
+  vm.runInNewContext(source("voice_state"), sandbox);
+  const f = sandbox.window.VoiceState;
+  for (const manuallyMuted of [false, true]) {
+    const state = { joined: true, floorKnown: true, floorOwner: null, muted: manuallyMuted };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      f.setFloor(state, "alice", "bob");
+      assert.equal(f.muted(state, "bob"), true);
+      assert.equal(state.muted, manuallyMuted);
+      f.setFloor(state, "carol", "bob");
+      assert.equal(f.muted(state, "bob"), true, "new owner keeps the listener blocked");
+      f.setFloor(state, null, "bob"); // Same snapshot for manual release and expiration.
+      assert.equal(f.muted(state, "bob"), manuallyMuted);
+      assert.equal(state.floorSuppressed, false);
+      assert.equal(state.muted, manuallyMuted);
+    }
+  }
 });

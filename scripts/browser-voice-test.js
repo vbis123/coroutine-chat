@@ -167,11 +167,19 @@ async function main() {
       await a.locator("#voice-floor").click();
       await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
       assert.equal(await trackEnabled(a), false, "release preserves mute");
-      assert.equal(await trackEnabled(b), false, "release does not surprise listener with live mic");
+      assert.equal(await trackEnabled(b), true, "release restores an unmuted listener automatically");
       await b.locator("#voice-ptt").dispatchEvent("mousedown");
       assert.equal(await trackEnabled(b), true);
       await b.locator("#voice-ptt").dispatchEvent("mouseup");
-      assert.equal(await trackEnabled(b), false, "PTT restores prior listener state");
+      assert.equal(await trackEnabled(b), true, "PTT restores prior unmuted listener state");
+      await b.locator("#voice-mute").click();
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("alice"));
+      assert.equal(await trackEnabled(b), false);
+      await a.locator("#voice-floor").click();
+      await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
+      assert.equal(await trackEnabled(b), false, "explicit listener mute survives release");
+      await b.locator("#voice-mute").click();
       // Releasing ownership is not a user mute action.
       await a.locator("#voice-mute").click();
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -182,7 +190,8 @@ async function main() {
         await a.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("свободен"));
         assert.equal(await trackEnabled(a), true, "own release must not act as the mute button");
         assert.equal(await a.locator("#voice-mute").textContent(), "Выключить");
-        assert.equal(await trackEnabled(b), false, "listeners keep their current mute state");
+        assert.equal(await trackEnabled(b), true, "listeners resume automatically on each release");
+        assert.equal(await b.locator("#voice-mute").textContent(), "Выключить");
       }
       await a.locator("#voice-floor").click();
       await b.waitForFunction(() => document.querySelector("#voice-floor-status").textContent.includes("alice"));
@@ -212,6 +221,11 @@ async function main() {
       assert.equal(await a.locator("#voice-floor").textContent(), "Забрать микрофон");
       const enabled = await a.evaluate(() => window.testPCs.filter((pc) => pc.connectionState !== "closed")[0].getSenders()[0].track.enabled);
       assert.equal(enabled, true, "expiration preserves the owner's unmuted preference");
+      const listenerEnabled = await b.evaluate(() => window.testPCs.filter((pc) => pc.connectionState !== "closed")[0].getSenders()[0].track.enabled);
+      assert.equal(listenerEnabled, true, "expiration restores listener audio automatically");
+      assert.equal(await b.locator("#voice-mute").textContent(), "Выключить");
+      await delay(1500);
+      await report("room-after-auto-release");
       await a.locator("#voice-floor").click();
       await b.waitForFunction(() => /осталось \d+ с/.test(document.querySelector("#voice-floor-status").textContent));
       assert.ok(await remaining(b) >= 58, "new capture gets a new minute");
