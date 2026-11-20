@@ -666,6 +666,21 @@ button:hover {
   font-weight: 600;
 }
 
+#call-accept {
+  background: #e5e7eb;
+  color: #374151;
+  border-color: transparent;
+}
+
+#call-accept:disabled {
+  cursor: default;
+}
+
+#call-accept.is-incoming:not(:disabled) {
+  background: #15803d;
+  color: #fff;
+}
+
 .sound-unlock {
   display: flex;
   align-items: center;

@@ -133,6 +133,8 @@
     audioCtx: null,
     floorOwner: null,
     floorStateTimer: null,
+    floorDeadlineAt: null,
+    floorCountdownTimer: null,
     floorKnown: false,
     floorSuppressed: false,
     membershipId: null,
@@ -155,6 +157,7 @@
     iceQueue: [],
     callId: null,
     peerId: null,
+    accepting: false,
     e2eeEnabled: false,
     e2eeReady: false,
     e2eeKeyPair: null,
@@ -828,6 +831,15 @@
     });
   };
 
+  const updateVoiceFloorStatus = () => {
+    const seconds = VoiceState.floorSecondsLeft(voice);
+    const countdown = seconds === null ? "" : ` · осталось ${seconds} с`;
+    voiceFloorStatus.textContent = voice.joined && !voice.floorKnown ? "Получаем состояние комнаты…" : hasVoiceFloor()
+      ? `Общий микрофон удерживает: ${voice.floorOwner}${countdown}`
+      : "Общий микрофон: свободен";
+    voiceFloorStatus.classList.toggle("busy", hasVoiceFloor());
+  };
+
   const updateVoiceUI = () => {
     const hasSettings = hasVoiceSettings();
     const e2eeSupported = Boolean(E2EE.supports);
@@ -866,10 +878,14 @@
     voiceMicStatus.textContent = voice.joined
       ? `Микрофон: ${effectiveVoiceMuted() ? "мут" : "живой"}`
       : "Микрофон: выкл";
-    voiceFloorStatus.textContent = voice.joined && !voice.floorKnown ? "Получаем состояние комнаты…" : hasVoiceFloor()
-      ? `Общий микрофон удерживает: ${voice.floorOwner}`
-      : "Общий микрофон: свободен";
-    voiceFloorStatus.classList.toggle("busy", floorBusy);
+    updateVoiceFloorStatus();
+    const needsCountdown = voice.joined && voice.floorOwner && voice.floorDeadlineAt !== null;
+    if (needsCountdown && !voice.floorCountdownTimer) {
+      voice.floorCountdownTimer = setInterval(updateVoiceFloorStatus, 250);
+    } else if (!needsCountdown && voice.floorCountdownTimer) {
+      clearInterval(voice.floorCountdownTimer);
+      voice.floorCountdownTimer = null;
+    }
   };
 
   const setVoiceWarning = (show) => {
@@ -1163,6 +1179,7 @@
     voice.e2eeEnabled = false;
     voice.verificationCode = null;
     voice.floorOwner = null;
+    voice.floorDeadlineAt = null;
     voice.pttActive = false;
     stopSpeakingMonitor("local");
     for (const peerId of Array.from(voice.peers.keys())) {
@@ -1217,7 +1234,8 @@
     if (!voice.joined || !voice.floorKnown) return;
     const mine = voice.floorOwner === getNickname();
     if (mine) {
-      voice.floorSuppressed = true;
+      // Releasing ownership preserves the explicit mute preference.
+      voice.floorSuppressed = false;
       voice.pttActive = false;
       applyVoiceTrackState();
       sendVoiceState(voice.muted, voiceLocalSpeaking);
@@ -1330,10 +1348,15 @@
 
   const updateCallUI = () => {
     const state = call.fsm.state;
+    const canAccept = state === "incoming" && !call.accepting;
+    callAcceptBtn.disabled = !canAccept;
+    callAcceptBtn.classList.toggle("is-incoming", canAccept);
+    callAcceptBtn.textContent = call.accepting ? "Готово" : "Принять";
+    callRejectBtn.disabled = !canAccept;
     callMuteBtn.disabled = state !== "in_call";
     callHangupBtn.disabled = state !== "in_call";
     outgoingCallEl.classList.toggle("hidden", state !== "outgoing");
-    incomingCallEl.classList.toggle("hidden", state !== "incoming");
+    incomingCallEl.classList.toggle("hidden", state !== "incoming" && !call.accepting);
     if (state === "idle") {
       callStatusEl.textContent = "Звонков нет.";
     } else if (state === "outgoing") {
@@ -1425,6 +1448,7 @@
     call.remoteStream = null;
     callRemoteAudioEl.innerHTML = "";
     call.peerId = null;
+    call.accepting = false;
     call.callId = null;
     call.iceQueue = [];
     call.e2eeKeyPair = null;
@@ -1601,8 +1625,12 @@
   };
 
   const acceptIncomingCall = async () => {
-    if (call.fsm.state !== "incoming") return;
-    await AudioAlerts.ensureAudioUnlocked();
+    if (call.fsm.state !== "incoming" || call.accepting) return;
+    const session = call.callId;
+    call.accepting = true;
+    updateCallUI();
+    try { await AudioAlerts.ensureAudioUnlocked(); } catch (_) { updateSoundUnlock(); }
+    if (session !== call.callId || call.fsm.state !== "incoming") return;
     AudioAlerts.stopAllTones();
 
     e2eeDebug(
@@ -1613,7 +1641,6 @@
     }
     call.fsm.transition("accepted");
     updateCallUI();
-    const session = call.callId;
     try { await prepareLocalCallStream(); } catch (_) {
       if (session !== call.callId) return;
       sendSignal({ type: "call:reject", to: call.peerId, payload: { callId: session, reason: "microphone" } });
@@ -1960,6 +1987,8 @@
         if (Object.prototype.hasOwnProperty.call(msg.payload, "floorOwner")) {
           clearTimeout(voice.floorStateTimer);
           VoiceState.setFloor(voice, msg.payload.floorOwner || null, getNickname());
+          voice.floorDeadlineAt = voice.floorOwner && Number.isFinite(msg.payload.floorRemainingMs)
+            ? Date.now() + Math.max(0, msg.payload.floorRemainingMs) : null;
         }
         voice.roster = new Map(
           msg.payload.participants.map((p) => [p.id, { muted: p.muted, speaking: p.speaking }])
@@ -2025,6 +2054,7 @@
       voice.roster.delete(msg.from);
       if (voice.floorOwner === msg.from) {
         VoiceState.setFloor(voice, null, getNickname());
+        voice.floorDeadlineAt = null;
         applyVoiceTrackState();
         sendVoiceState(voice.muted, voiceLocalSpeaking);
       }
